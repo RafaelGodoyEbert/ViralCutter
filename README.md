@@ -15,7 +15,7 @@ ViralCutter é uma ferramenta inovadora para gerar vídeos virais a partir de co
 ## **Como Usar**
 <!-- 
 Entre no link e siga os passos na ordem:<br> [![Open In Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252)](https://colab.research.google.com/drive/1gcxImzBt0ObWLfW3ThEcwqKhasB4WpgX?usp=sharing)
-HF [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/akhaliq/ESPnet2-TTS)
+HF [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)]()
 -->
 Entre no link e siga os passos na ordem: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1gcxImzBt0ObWLfW3ThEcwqKhasB4WpgX?usp=sharing)
 
@@ -30,7 +30,15 @@ Este projeto foi inspirado nos seguintes repositórios:
 
 *   [Reels Clips Automator](https://github.com/eddieoz/reels-clips-automator)
 *   [YoutubeVideoToAIPoweredShorts](https://github.com/Fitsbit/YoutubeVideoToAIPoweredShorts)
-  
+
+## TODO📝
+- [x] Release code
+- [ ] Huggingface SpaceDemo
+- [ ] Two face in the cut
+- [ ] Custom caption and burn
+- [ ] Make the code faster
+- [ ] More types of framing beyond 9:16
+
 ## **Contribuições**
 Quer ajudar a tornar o ViralCutter ainda melhor? Se você tiver sugestões ou quiser contribuir com o código, fique à vontade para abrir uma issue ou enviar um pull request no nosso repositório do GitHub.
 
