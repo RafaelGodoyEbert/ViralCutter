@@ -11,6 +11,7 @@ ViralCutter é uma ferramenta inovadora para gerar vídeos virais a partir de co
 - **Corte e Ajuste de Formato**: Corta os segmentos selecionados e ajusta a proporção para 9:16.
 - **Mesclagem de Áudio e Vídeo**: Combina o áudio transcrito com os clipes de vídeo processados.
 - **Exportação em Lote**: Gera um arquivo ZIP com todos os vídeos virais criados, facilitando o download e compartilhamento.
+- **Legenda personalizada**: Você cria uma legenda personalizada com cores, highlight, sem highlight ou palavra por palavra, tendo uma ampla possibilidade de edição.
 
 ## **Como Usar**
 <!-- 
@@ -39,12 +40,17 @@ Este projeto foi inspirado nos seguintes repositórios:
 - [ ] Make the code faster
 - [ ] More types of framing beyond 9:16
 - [x] The cut follows the face as it moves
+- [ ] Automatic translation
+
+## Exmplo de vídeo viral ``com highlight ativo``
+https://github.com/user-attachments/assets/dd9a7039-e0f3-427a-a6e1-f50ab5029082
+
 
 ## **Contribuições**
 Quer ajudar a tornar o ViralCutter ainda melhor? Se você tiver sugestões ou quiser contribuir com o código, fique à vontade para abrir uma issue ou enviar um pull request no nosso repositório do GitHub.
 
 ## **Versão**
-`0.3v Alpha`  
+`0.5v Alpha`  
 Uma alternativa gratuita ao `opus.pro` e ao `vidyo.ai`.
 
 ---
