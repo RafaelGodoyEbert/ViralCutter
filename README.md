@@ -34,16 +34,17 @@ Este projeto foi inspirado nos seguintes repositórios:
 ## TODO📝
 - [x] Release code
 - [ ] Huggingface SpaceDemo
-- [ ] Two face in the cut
+- [x] Two face in the cut
 - [ ] Custom caption and burn
 - [ ] Make the code faster
 - [ ] More types of framing beyond 9:16
+- [x] The cut follows the face as it moves
 
 ## **Contribuições**
 Quer ajudar a tornar o ViralCutter ainda melhor? Se você tiver sugestões ou quiser contribuir com o código, fique à vontade para abrir uma issue ou enviar um pull request no nosso repositório do GitHub.
 
 ## **Versão**
-`0.1v Alpha`  
+`0.3v Alpha`  
 Uma alternativa gratuita ao `opus.pro` e ao `vidyo.ai`.
 
 ---
