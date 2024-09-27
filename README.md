@@ -35,7 +35,7 @@ Este projeto foi inspirado nos seguintes repositórios:
 - [x] Release code
 - [ ] Huggingface SpaceDemo
 - [x] Two face in the cut
-- [ ] Custom caption and burn
+- [x] Custom caption and burn
 - [ ] Make the code faster
 - [ ] More types of framing beyond 9:16
 - [x] The cut follows the face as it moves
