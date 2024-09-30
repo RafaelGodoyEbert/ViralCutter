@@ -35,81 +35,93 @@ def edit():
         resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_AREA)
 
         return resized
+        
+    def is_different_faces(landmarks1, landmarks2, threshold=0.3):
+        # Calcular a distância entre os centros dos rostos
+        center1 = np.mean([(landmark.x, landmark.y) for landmark in landmarks1], axis=0)
+        center2 = np.mean([(landmark.x, landmark.y) for landmark in landmarks2], axis=0)
+        distance = np.linalg.norm(center1 - center2)
+        return distance > threshold
+        
+    import cv2
+    import numpy as np
 
     def crop_and_resize_two_faces(frame, landmarks, zoom_factor):
         frame_height, frame_width = frame.shape[:2]
 
-        # Calcular os limites do primeiro rosto
-        x_min1 = min(landmark.x for landmark in landmarks[0])
-        x_max1 = max(landmark.x for landmark in landmarks[0])
-        y_min1 = min(landmark.y for landmark in landmarks[0])
-        y_max1 = max(landmark.y for landmark in landmarks[0])
+        if len(landmarks) < 2 or not is_different_faces(landmarks[0], landmarks[1]):
+            return None
 
-        # Calcular os limites do segundo rosto
-        x_min2 = min(landmark.x for landmark in landmarks[1])
-        x_max2 = max(landmark.x for landmark in landmarks[1])
-        y_min2 = min(landmark.y for landmark in landmarks[1])
-        y_max2 = max(landmark.y for landmark in landmarks[1])
+        # Definição dos limites dos rostos
+        x_min1, x_max1, y_min1, y_max1 = (
+            min(landmark.x for landmark in landmarks[0]),
+            max(landmark.x for landmark in landmarks[0]),
+            min(landmark.y for landmark in landmarks[0]),
+            max(landmark.y for landmark in landmarks[0])
+        )
+        x_min2, x_max2, y_min2, y_max2 = (
+            min(landmark.x for landmark in landmarks[1]),
+            max(landmark.x for landmark in landmarks[1]),
+            min(landmark.y for landmark in landmarks[1]),
+            max(landmark.y for landmark in landmarks[1])
+        )
 
         # Converter coordenadas para pixels
-        face_x_min1, face_x_max1 = int(x_min1 * frame_width), int(x_max1 * frame_width)
-        face_y_min1, face_y_max1 = int(y_min1 * frame_height), int(y_max1 * frame_height)
+        face_coords = [
+            (
+                int(x_min * frame_width), int(x_max * frame_width),
+                int(y_min * frame_height), int(y_max * frame_height)
+            )
+            for x_min, x_max, y_min, y_max in [(x_min1, x_max1, y_min1, y_max1), (x_min2, x_max2, y_min2, y_max2)]
+        ]
 
-        face_x_min2, face_x_max2 = int(x_min2 * frame_width), int(x_max2 * frame_width)
-        face_y_min2, face_y_max2 = int(y_min2 * frame_height), int(y_max2 * frame_height)
-
-        # Calcular largura e altura dos rostos
-        face_width1 = face_x_max1 - face_x_min1
-        face_height1 = face_y_max1 - face_y_min1
-
-        face_width2 = face_x_max2 - face_x_min2
-        face_height2 = face_y_max2 - face_y_min2
-
-        # Aplicar zoom para dar um pouco mais de espaço ao redor do rosto
-        zoomed_width1 = int(face_width1 * zoom_factor)
-        zoomed_height1 = int(face_height1 * zoom_factor)
-
-        zoomed_width2 = int(face_width2 * zoom_factor)
-        zoomed_height2 = int(face_height2 * zoom_factor)
-
-        # Calcular o centro de cada rosto
-        face_center_x1 = (face_x_min1 + face_x_max1) // 2
-        face_center_y1 = (face_y_min1 + face_y_max1) // 2
-
-        face_center_x2 = (face_x_min2 + face_x_max2) // 2
-        face_center_y2 = (face_y_min2 + face_y_max2) // 2
-
-        # Definir a área de corte (crop) mantendo a proporção quadrada para metade do vídeo (9:16)
         def calculate_crop_square(center_x, center_y, zoomed_width, zoomed_height):
-            crop_size = max(zoomed_width, zoomed_height)  # Usar o maior entre largura e altura para manter o quadrado
-
+            crop_size = max(zoomed_width, zoomed_height)
             crop_x_min = max(0, center_x - crop_size // 2)
             crop_y_min = max(0, center_y - crop_size // 2)
             crop_x_max = min(frame_width, crop_x_min + crop_size)
             crop_y_max = min(frame_height, crop_y_min + crop_size)
-
             return crop_x_min, crop_y_min, crop_x_max, crop_y_max
 
-        # Calcular as áreas de corte para cada rosto
-        crop_x1_min, crop_y1_min, crop_x1_max, crop_y1_max = calculate_crop_square(
-            face_center_x1, face_center_y1, zoomed_width1, zoomed_height1
-        )
-        crop_x2_min, crop_y2_min, crop_x2_max, crop_y2_max = calculate_crop_square(
-            face_center_x2, face_center_y2, zoomed_width2, zoomed_height2
-        )
+        faces_images = []
+        
+        for (face_x_min, face_x_max, face_y_min, face_y_max) in face_coords:
+            # Calcular o centro e a largura/altura
+            face_center_x = (face_x_min + face_x_max) // 2
+            face_center_y = (face_y_min + face_y_max) // 2
+            zoomed_width = int((face_x_max - face_x_min) * zoom_factor)
+            zoomed_height = int((face_y_max - face_y_min) * zoom_factor)
 
-        # Cortar a imagem para cada rosto
-        face1_img = frame[crop_y1_min:crop_y1_max, crop_x1_min:crop_x1_max]
-        face2_img = frame[crop_y2_min:crop_y2_max, crop_x2_min:crop_x2_max]
+            crop_coords = calculate_crop_square(face_center_x, face_center_y, zoomed_width, zoomed_height)
+            face_image = frame[crop_coords[1]:crop_coords[3], crop_coords[0]:crop_coords[2]]
+            
+            # Resize e adicione à lista
+            faces_images.append(cv2.resize(face_image, (1080, 960), interpolation=cv2.INTER_AREA))
 
-        # Garantir que os cortes para cada rosto sejam quadrados e manter a proporção
-        face1_square = cv2.resize(face1_img, (1080, 960), interpolation=cv2.INTER_AREA)
-        face2_square = cv2.resize(face2_img, (1080, 960), interpolation=cv2.INTER_AREA)
-
-        # Combinar os dois rostos em uma única imagem (um em cima do outro, cada um com 960px de altura)
-        combined = np.vstack((face1_square, face2_square))
-
+        # Combinar rostos
+        combined = np.vstack(faces_images)
         return combined
+
+    # Exemplo de uso com captura de vídeo
+    cap = cv2.VideoCapture("video_input.mp4")
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        # Aqui você deve obter os landmarks
+        landmarks = []  # Suponha que você tenha a lista de landmarks para os rostos
+
+        combined_faces = crop_and_resize_two_faces(frame, landmarks, zoom_factor=1.5)
+        if combined_faces is not None:
+            cv2.imshow("Faces", combined_faces)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
 
     def resize_with_padding(frame):
         frame_height, frame_width = frame.shape[:2]

@@ -1,15 +1,12 @@
 import json
 
-def create(num_segments, viral_mode, themes):
-    quantidade_de_virals = 3  # @param {type:"number"}
+def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo):
+    quantidade_de_virals = num_segments  # @param {type:"number"}
 
     with open('tmp/input_video.tsv', 'r', encoding='utf-8') as f:
         content = f.read()
 
     system = f"You are a Viral Segment Identifier, an AI system that analyzes a video's transcript and predicts which segments might go viral on social media platforms. You use factors such as emotional impact, humor, unexpected content, and relevance to current trends to make your predictions. You return a structured text document detailing the start and end times, the description, the duration, and a viral score for the potential viral segments."
-
-    tempo_minimo = 50  # @param {type:"number"}
-    tempo_maximo = 90  # @param {type:"number"}
 
     json_template = '''
             { "segments" :
@@ -42,16 +39,16 @@ def create(num_segments, viral_mode, themes):
 
     # Prepare the output texts
     #@markdown <h1>Se viral está marcado, os temas não serão executados.</h1>
-    viral = True #@param{type:"boolean"}
+    viral = None #@param{type:"boolean"}
     #@markdown <h1>Se viral está desmarcado, a IA vai procurar os temas selecionadas</h1>
 
     #@markdown Exemplo: ``GTA VI, cadeirada datena, as luas de júpiter``
     temas = '' # @param {type:"string", placeholder:"Coloque o tema aqui, se mais que um, separado por virgulas"}
 
-    if viral:  # Se viral for True
+    if viral_mode:
         type = f"""analyze the segment for potential virality and identify {quantidade_de_virals} most viral segments from the transcript"""
     else:
-        type = f"""analyze the segment for potential virality and identify {quantidade_de_virals} the best parts based on the list of themes {temas}."""
+        type = f"""analyze the segment for potential virality and identify {quantidade_de_virals} the best parts based on the list of themes {themes}."""
 
     output_texts = []
     for i, chunk in enumerate(chunks):
