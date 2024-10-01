@@ -18,7 +18,8 @@ ViralCutter é uma ferramenta inovadora para gerar vídeos virais a partir de co
 Entre no link e siga os passos na ordem:<br> [![Open In Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252)](https://colab.research.google.com/drive/1gcxImzBt0ObWLfW3ThEcwqKhasB4WpgX?usp=sharing)
 HF [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)]()
 -->
-- Entre no link e siga os passos na ordem: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1gcxImzBt0ObWLfW3ThEcwqKhasB4WpgX?usp=sharing) <br>
+- Entre no link e siga os passos na ordem: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1UZKzeqjIeEyvq9nPx7s_4mU6xlkZQn_R?usp=sharing#scrollTo=pa36OeArowme) <br>
+- Versão simplificada sem opção de mudança de texto [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1aDNLtoJZa9Z0lKcYTR6CGNMgZ_iTpwJD?usp=sharing) <br>
 - Criei esse site para ajudar a dividir a trascrição, já que ChatGPT tem limites: [Split text for ChatGPT](https://rafaelgodoyebert.github.io/ViralCutter/)
 
 ## **Limitações**
@@ -41,6 +42,10 @@ Este projeto foi inspirado nos seguintes repositórios:
 - [ ] More types of framing beyond 9:16
 - [x] The cut follows the face as it moves
 - [ ] Automatic translation
+- [ ] Satisfactory video on the side
+- [ ] Background music
+- [ ] watermark at user's choice
+- [ ] Upload directly to YouTube channel
 
 ## Exmplo de vídeo viral ``com highlight ativo``
 https://github.com/user-attachments/assets/dd9a7039-e0f3-427a-a6e1-f50ab5029082
