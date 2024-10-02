@@ -64,8 +64,18 @@ if burn_only:
 else:
     # Input variables
     url = input("Enter the YouTube video URL: ")
-    num_segments = int(input("Enter the number of viral segments to create: "))
-    viral_mode = input("Do you want viral mode? (yes/no): ").lower() == 'yes'
+    
+    while True:
+        try:
+            num_segments = int(input("Enter the number of viral segments to create: "))
+            if num_segments <= 1:
+                print("\nErro: o número de segmentos deve ser numeral e maior que 0.")
+            else:
+                break
+        except ValueError:
+            print("\nErro: o valor inserido não é um número inteiro. Por favor, tente novamente.")
+        
+    viral_mode = input("Do you want viral mode? (yes/no): ").lower() == 'yes' or 'y'
     themes = input("Enter themes (comma-separated, leave blank if viral mode is True): ") if not viral_mode else ''
     
     tempo_minimo = 15 #int(input("Enter the minimum duration for segments (in seconds): "))
