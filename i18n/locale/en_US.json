@@ -1,0 +1,13 @@
+{
+    "main": "main",
+    "Burn only mode activated. Skipping to subtitle burning...": "Burn only mode activated. Skipping to subtitle burning...",
+    "Subtitle burning completed.": "Subtitle burning completed.",
+    "Enter the YouTube video URL: ": "Enter the YouTube video URL: ",
+    "Enter the number of viral segments to create: ": "Enter the number of viral segments to create: ",
+    "\nError: Number of segments must be numeric and greater than 0.": "\nError: Number of segments must be numeric and greater than 0.",
+    "Error: The value you entered is not an integer. Please try again.": "Error: The value you entered is not an integer. Please try again.",
+    "Do you want viral mode? (yes/no): ": "Do you want viral mode? (yes/no): ",
+    "Enter themes (comma-separated, leave blank if viral mode is True): ": "Enter themes (comma-separated, leave blank if viral mode is True): ",
+    "Subtitle burning skipped.": "Subtitle burning skipped.",
+    "Process completed successfully!": "Process completed successfully!"
+}

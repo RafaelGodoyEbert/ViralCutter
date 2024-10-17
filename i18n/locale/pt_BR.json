@@ -1,0 +1,13 @@
+{
+    "main": "main",
+    "Burn only mode activated. Skipping to subtitle burning...": "Modo de queima apenas ativado. Pulando para a queima de legendas...",
+    "Subtitle burning completed.": "Queima de legendas concluída.",
+    "Enter the YouTube video URL: ": "Insira a URL do vídeo do YouTube: ",
+    "Enter the number of viral segments to create: ": "Insira o número de segmentos virais a serem criados: ",
+    "\nError: Number of segments must be numeric and greater than 0.": "\nErro: O número de segmentos deve ser numérico e maior que 0.",
+    "Error: The value you entered is not an integer. Please try again.": "Erro: O valor que você inseriu não é um número inteiro. Por favor, tente novamente.",
+    "Do you want viral mode? (yes/no): ": "Você quer o modo viral? (yes/no): ",
+    "Enter themes (comma-separated, leave blank if viral mode is True): ": "Insira os temas (separados por vírgula, deixe em branco se o modo viral for verdadeiro): ",
+    "Subtitle burning skipped.": "Queima de legendas pulada.",
+    "Process completed successfully!": "Processo concluído com sucesso!"
+}

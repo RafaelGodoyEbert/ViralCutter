@@ -1,5 +1,7 @@
 # ViralCutter: Gerador de Vídeos Virais
-[ ![](https://dcbadge.vercel.app/api/server/aihubbrasil) ](https://discord.gg/aihubbrasil)
+[ ![](https://dcbadge.vercel.app/api/server/aihubbrasil) ](https://discord.gg/aihubbrasil) <br>
+[English](https://github.com/RafaelGodoyEbert/ViralCutter/blob/main/README_en.md) | [Português](https://github.com/RafaelGodoyEbert/ViralCutter/blob/main/README.md)
+
 ## **Descrição**
 ViralCutter é uma ferramenta inovadora para gerar vídeos virais a partir de conteúdo existente. Com técnicas avançadas de processamento de vídeo e áudio, o ViralCutter corta e edita segmentos de vídeo que são perfeitos para compartilhamento em redes sociais. Utilizando o modelo WhisperX para transcrição e geração de legendas automáticas, ele adapta os vídeos para o formato 9:16 (vertical), ideal para plataformas como TikTok e Instagram com Reels e Youtube com Shorts.
 
@@ -38,7 +40,7 @@ Este projeto foi inspirado nos seguintes repositórios:
 - [ ] Huggingface SpaceDemo
 - [x] Two face in the cut
 - [x] Custom caption and burn
-- [ ] Make the code faster
+- [x] Make the code faster
 - [ ] More types of framing beyond 9:16
 - [x] The cut follows the face as it moves
 - [ ] Automatic translation
@@ -55,7 +57,7 @@ https://github.com/user-attachments/assets/dd9a7039-e0f3-427a-a6e1-f50ab5029082
 Quer ajudar a tornar o ViralCutter ainda melhor? Se você tiver sugestões ou quiser contribuir com o código, fique à vontade para abrir uma issue ou enviar um pull request no nosso repositório do GitHub.
 
 ## **Versão**
-`0.5v Alpha`  
+`0.6v Alpha`  
 Uma alternativa gratuita ao `opus.pro` e ao `vidyo.ai`.
 
 ---

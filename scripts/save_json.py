@@ -9,7 +9,7 @@ def save_viral_segments(segments_data=None):
         if segments_data is None:
             # Solicita ao usuário que insira o JSON caso o arquivo não exista e os segmentos não estejam definidos
             while True:
-                user_input = input("Por favor, insira o JSON no formato desejado:\n")
+                user_input = input("\nPor favor, insira o JSON no formato desejado:\n")
                 try:
                     # Tenta carregar o JSON inserido
                     segments_data = json.loads(user_input)
@@ -30,6 +30,6 @@ def save_viral_segments(segments_data=None):
             # Caso os segmentos tenham sido gerados, salva automaticamente
             with open(output_txt_file, 'w', encoding='utf-8') as file:
                 json.dump(segments_data, file, ensure_ascii=False, indent=4)
-            print(f"Segmentos virais salvos em {output_txt_file}")
+            print(f"Segmentos virais salvos em {output_txt_file}\n")
     else:
         print(f"O arquivo {output_txt_file} já existe. Nenhuma entrada adicional é necessária.")

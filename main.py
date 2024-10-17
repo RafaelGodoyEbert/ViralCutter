@@ -1,5 +1,7 @@
 import os
 from scripts import download_video, transcribe_video, create_viral_segments, cut_segments, edit_video, transcribe_cuts, adjust_subtitles, burn_subtitles, save_json
+from i18n.i18n import I18nAuto
+i18n = I18nAuto()
 
 # Create necessary directories
 os.makedirs('tmp', exist_ok=True)
@@ -58,25 +60,25 @@ burn_subtitles_option = True
 model = 'large-v3'
 
 if burn_only:
-    print("Burn only mode activated. Skipping to subtitle burning...")
+    print(i18n("Burn only mode activated. Skipping to subtitle burning..."))
     burn_subtitles.burn()
-    print("Subtitle burning completed.")
+    print(i18n("Subtitle burning completed."))
 else:
     # Input variables
-    url = input("Enter the YouTube video URL: ")
+    url = input(i18n("Enter the YouTube video URL: "))
     
     while True:
         try:
-            num_segments = int(input("Enter the number of viral segments to create: "))
-            if num_segments <= 1:
-                print("\nErro: o número de segmentos deve ser numeral e maior que 0.")
+            num_segments = int(input(i18n("Enter the number of viral segments to create: ")))
+            if num_segments < 1:
+                print(i18n("\nError: Number of segments must be numeric and greater than 0."))
             else:
                 break
         except ValueError:
-            print("\nErro: o valor inserido não é um número inteiro. Por favor, tente novamente.")
+            print(i18n("\nError: The value you entered is not an integer. Please try again."))
         
-    viral_mode = input("Do you want viral mode? (yes/no): ").lower() == 'yes' or 'y'
-    themes = input("Enter themes (comma-separated, leave blank if viral mode is True): ") if not viral_mode else ''
+    viral_mode = input(i18n("Do you want viral mode? (yes/no): ")).lower() == 'yes' or 'y'
+    themes = input(i18n("Enter themes (comma-separated, leave blank if viral mode is True): ")) if not viral_mode else ''
     
     tempo_minimo = 15 #int(input("Enter the minimum duration for segments (in seconds): "))
     tempo_maximo = 90 #int(input("Enter the maximum duration for segments (in seconds): "))
@@ -96,6 +98,6 @@ else:
         adjust_subtitles.adjust(base_color, base_size, h_size, highlight_color, palavras_por_bloco, limite_gap, modo, posicao_vertical, alinhamento, fonte, contorno, cor_da_sombra, negrito, italico, sublinhado, tachado, estilo_da_borda, espessura_do_contorno, tamanho_da_sombra)
         burn_subtitles.burn()
     else:
-        print("Subtitle burning skipped.")
+        print(i18n("Subtitle burning skipped."))
 
-    print("Process completed successfully!")
+    print(i18n("Process completed successfully!"))
