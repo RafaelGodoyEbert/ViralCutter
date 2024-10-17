@@ -49,9 +49,15 @@ Este projeto foi inspirado nos seguintes repositórios:
 - [ ] watermark at user's choice
 - [ ] Upload directly to YouTube channel
 
-## Exmplo de vídeo viral ``com highlight ativo``
+## Exemplos
+### Exmplo de vídeo viral ``com highlight ativo`` [comprimido pra caber no github]
 https://github.com/user-attachments/assets/dd9a7039-e0f3-427a-a6e1-f50ab5029082
 
+### Exemplo Opus Clip vs ViralCutter [comprimido pra caber no github]
+https://github.com/user-attachments/assets/12916792-dc0e-4f63-a76b-5698946f50f4
+
+### Exemplo 2 faces [comprimido pra caber no github]
+https://github.com/user-attachments/assets/ca7ebb9c-52ba-4171-a513-625bef690a2b
 
 ## **Contribuições**
 Quer ajudar a tornar o ViralCutter ainda melhor? Se você tiver sugestões ou quiser contribuir com o código, fique à vontade para abrir uma issue ou enviar um pull request no nosso repositório do GitHub.
