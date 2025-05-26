@@ -1,0 +1,55 @@
+# ViralCutter Requirements
+# Updated for RTX 5090 compatibility and working transcription setup
+
+# Core dependencies for ViralCutter
+# Video processing and downloading
+yt-dlp>=2025.5.22
+opencv-python>=4.11.0
+ffmpeg-python>=0.2.0
+
+# PyTorch with CUDA 12.8 support (RTX 5090 compatible)
+# For RTX 5090 / RTX 50-series GPUs
+torch>=2.7.0
+torchvision>=0.22.0
+torchaudio>=2.7.0
+
+# Alternative PyTorch installation commands:
+# For RTX 5090: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# For RTX 40/30 series: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+# For CPU only: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Transcription - Using OpenAI Whisper (reliable)
+# Note: WhisperX has dependency conflicts with RTX 5090/newer PyTorch
+openai-whisper>=20240930
+
+# Computer Vision and Face Detection
+mediapipe>=0.10.21
+
+# Data processing - Compatible versions
+numpy>=1.26.4,<2.0  # mediapipe requires numpy<2
+
+# Audio processing
+librosa>=0.10.0
+soundfile>=0.12.1
+
+# Additional ML dependencies
+transformers>=4.52.0
+accelerate>=0.30.0
+
+# Utility dependencies
+tqdm>=4.67.0
+requests>=2.32.0
+Pillow>=11.2.0
+
+# Optional faster transcription (if WhisperX compatibility is fixed)
+# whisperx>=3.3.4  # Currently disabled due to RTX 5090 compatibility issues
+
+# Development dependencies (optional)
+# pytest>=7.0.0
+# black>=23.0.0
+# flake8>=6.0.0
+
+# Note about installation:
+# 1. Install PyTorch first with appropriate CUDA version for your GPU
+# 2. Then install other requirements: pip install -r requirements.txt
+# 3. See INSTALL.md for detailed GPU-specific installation instructions

@@ -11,7 +11,7 @@ def transcribe():
 
         # Skip processing if the JSON file already exists
         if os.path.exists(json_file):
-            print(f"Arquivo já existe, pulando: {json_file}")
+            print(f"File already exists, skipping: {json_file}")
             return
 
         command = [
@@ -35,7 +35,7 @@ def transcribe():
         print(f"Comando executado: {command}")
         
         if result.returncode != 0:
-            print("Erro durante a transcrição:")
+            print("Error during transcription:")
             print(result.stderr)
         else:
             print(f"Transcrição concluída. Arquivo salvo em: {output_file} e {json_file}")
@@ -45,9 +45,9 @@ def transcribe():
     input_folder = 'final/'
     output_folder = 'subs/'
 
-    # Itera sobre todos os arquivos na pasta de entrada
+    # Iterate over all files in the input folder
     for filename in os.listdir(input_folder):
-        if filename.endswith('.mp4'):  # Filtra apenas arquivos .mp4
+        if filename.endswith('.mp4'):  # Filter only .mp4 files
             input_file = os.path.join(input_folder, filename)
             generate_whisperx(input_file, output_folder)
 

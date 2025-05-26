@@ -5,56 +5,56 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 def burn():
-    # Caminhos das pastas
+    # Folder paths
     subs_folder = 'subs_ass'
     videos_folder = 'final'
-    output_folder = 'burned_sub'  # Pasta para salvar os vídeos com legendas
+    output_folder = 'burned_sub'  # Folder to save videos with subtitles
 
-    # Cria a pasta de saída se não existir
+    # Create output folder if it doesn't exist
     os.makedirs(output_folder, exist_ok=True)
 
-    # Itera sobre os arquivos de vídeo na pasta final
+    # Iterate over video files in the final folder
     for video_file in os.listdir(videos_folder):
-        if video_file.endswith(('.mp4', '.mkv', '.avi')):  # Formatos suportados
-            # Extrai o nome base do vídeo (sem extensão)
+        if video_file.endswith(('.mp4', '.mkv', '.avi')):  # Supported formats
+            # Extract base video name (without extension)
             video_name = os.path.splitext(video_file)[0]
 
-            # Define o caminho para a legenda correspondente
+            # Define path for corresponding subtitle
             subtitle_file = os.path.join(subs_folder, f"{video_name}.ass")
-            print(f"Caminho da legenda: {subtitle_file}")
+            print(f"Subtitle path: {subtitle_file}")
 
-            # Verifica se a legenda existe
+            # Check if subtitle exists
             if os.path.exists(subtitle_file):
-                # Define o caminho de saída para o vídeo com legendas
+                # Define output path for video with subtitles
                 output_file = os.path.join(output_folder, f"{video_name}_subtitled.mp4")
 
-                # Ajuste no caminho da legenda para FFmpeg
+                # Adjust subtitle path for FFmpeg
                 subtitle_file_ffmpeg = subtitle_file.replace('\\', '/')
 
-                # Comando FFmpeg para adicionar as legendas
+                # FFmpeg command to add subtitles
                 command = [
                     'ffmpeg',
-                    '-i', os.path.join(videos_folder, video_file),  # Vídeo de entrada
-                    '-vf', f"subtitles='{subtitle_file_ffmpeg}'",  # Filtro de legendas com caminho corrigido
-                    '-c:v', 'h264_nvenc',  # Codificador NVIDIA
-                    '-preset', 'p1',  # Preset para velocidade
-                    '-b:v', '5M',  # Bitrate
-                    '-c:a', 'copy',  # Copia o áudio
+                    '-i', os.path.join(videos_folder, video_file),  # Input video
+                    '-vf', f"subtitles='{subtitle_file_ffmpeg}'",  # Subtitle filter with corrected path
+                    '-c:v', 'h264_nvenc',  # NVIDIA encoder
+                    '-preset', 'p1',  # Speed preset
+                    '-b:v', '5M',  # Video bitrate
+                    '-c:a', 'copy',  # Copy audio
                     output_file
                 ]
 
-                # Log dos caminhos e do comando
-                print(f"Processando vídeo: {video_file}")
-                print(f"Caminho da legenda: {subtitle_file}")
-                print(f"Caminho de saída: {output_file}")
-                print(f"Comando: {' '.join(command)}")
+                # Log paths and command
+                print(f"Processing video: {video_file}")
+                print(f"Subtitle path: {subtitle_file}")
+                print(f"Output path: {output_file}")
+                print(f"Command: {' '.join(command)}")
 
-                # Executa o comando
+                # Execute command
                 try:
                     subprocess.run(command, check=True)
-                    print(f"Processado: {output_file}")
+                    print(f"Processed: {output_file}")
                 except subprocess.CalledProcessError as e:
-                    print(f"Erro ao processar {video_name}: {e}")
+                    print(f"Error processing {video_name}: {e}")
             else:
-                print(f"Legenda não encontrada para: {video_name}")
+                print(f"Subtitle not found for: {video_name}")
 

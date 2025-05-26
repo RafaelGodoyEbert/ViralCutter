@@ -4,19 +4,19 @@ import numpy as np
 
 def crop_and_resize_two_faces(frame, face_positions, zoom_out_factor=2.5):
     """
-    Recorta e redimensiona dois rostos detectados no frame, ajustando para uma composição vertical
-    1080x1920 onde cada rosto ocupa metade da tela, com um zoom mais afastado.
+    Crops and resizes two detected faces in the frame, adjusting for a vertical composition
+    1080x1920 where each face occupies half the screen, with a more distant zoom.
     """
     height, width, _ = frame.shape
 
-    # Definir o tamanho da região de cada rosto
+    # Define the size of each face region
     crop_width = 1080
     crop_height = 960
 
-    # Recortar e redimensionar o primeiro rosto
+    # Crop and resize the first face
     x1, y1, w1, h1 = face_positions[0]
 
-    # Ajustar o zoom aplicando um fator de afastamento
+    # Adjust zoom by applying a zoom-out factor
     x1_center = x1 + w1 // 2
     y1_center = y1 + h1 // 2
     new_w1 = int(w1 * zoom_out_factor)
@@ -28,10 +28,10 @@ def crop_and_resize_two_faces(frame, face_positions, zoom_out_factor=2.5):
     face1 = frame[max(0, y1_new):min(height, y1_new + new_h1), max(0, x1_new):min(width, x1_new + new_w1)]
     face1_resized = cv2.resize(face1, (crop_width, crop_height))
 
-    # Recortar e redimensionar o segundo rosto
+    # Crop and resize the second face
     x2, y2, w2, h2 = face_positions[1]
 
-    # Ajustar o zoom aplicando o fator de afastamento
+    # Adjust zoom by applying the zoom-out factor
     x2_center = x2 + w2 // 2
     y2_center = y2 + h2 // 2
     new_w2 = int(w2 * zoom_out_factor)
@@ -43,10 +43,10 @@ def crop_and_resize_two_faces(frame, face_positions, zoom_out_factor=2.5):
     face2 = frame[max(0, y2_new):min(height, y2_new + new_h2), max(0, x2_new):min(width, x2_new + new_w2)]
     face2_resized = cv2.resize(face2, (crop_width, crop_height))
 
-    # Criar uma tela de 1080x1920 para colocar os dois rostos
+    # Create a 1080x1920 canvas to place both faces
     result_frame = np.zeros((1920, 1080, 3), dtype=np.uint8)
 
-    # Colocar os rostos na tela: primeiro em cima, segundo embaixo
+    # Place faces on screen: first on top, second on bottom
     result_frame[0:960, :] = face1_resized
     result_frame[960:1920, :] = face2_resized
 

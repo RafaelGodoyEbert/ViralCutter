@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # GPU-accelerated version (requires nvidia-docker)
+  viralcutter-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: cuda-base
+    container_name: viralcutter-gpu
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    volumes:
+      - ./output:/app/output
+      - ./tmp:/app/tmp
+      - ./models:/app/models
+    stdin_open: true
+    tty: true
+    profiles:
+      - gpu
+
+  # CPU-only version
+  viralcutter-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: cpu-base
+    container_name: viralcutter-cpu
+    volumes:
+      - ./output:/app/output
+      - ./tmp:/app/tmp
+      - ./models:/app/models
+    stdin_open: true
+    tty: true
+    profiles:
+      - cpu
+
+  # Development version with code mounted
+  viralcutter-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: cpu-base
+    container_name: viralcutter-dev
+    volumes:
+      - .:/app
+      - ./output:/app/output
+    stdin_open: true
+    tty: true
+    profiles:
+      - dev
+
+volumes:
+  models:
+    driver: local
+  output:
+    driver: local
