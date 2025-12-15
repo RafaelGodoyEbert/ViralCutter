@@ -51,9 +51,9 @@ def get_subtitle_config(config_path=None):
     outline_transparency = "FF" 
     highlight_color_transparency = "00"
     shadow_color_transparency = "00"
-
+    
     config = {
-        "font": "Arial",
+        "font": "Montserrat-Regular",
         "base_size": 12,
         "base_color": f"&H{base_color_transparency}{COLORS['white']}&",
         "highlight_size": 14,
@@ -67,10 +67,10 @@ def get_subtitle_config(config_path=None):
         "italic": 0,
         "underline": 0,
         "strikeout": 0,
-        "border_style": 3, # 1=outline, 3=box
+        "border_style": 2, # 1=outline, 3=box
         "outline_thickness": 1.5,
         "outline_color": f"&H{outline_transparency}{COLORS['grey']}&",
-        "shadow_size": 10,
+        "shadow_size": 2,
         "shadow_color": f"&H{shadow_color_transparency}{COLORS['black']}&",
     }
 

@@ -3,7 +3,7 @@ import re
 import os
 
 def adjust(base_color, base_size, highlight_size, highlight_color, words_per_block, gap_limit, mode, vertical_position, alignment, font, outline_color, shadow_color, bold, italic, underline, strikeout, border_style, outline_thickness, shadow_size, project_folder="tmp"):
-    def generate_ass(json_data, output_file, base_color=base_color, base_size=base_size, highlight_size=highlight_size, highlight_color=highlight_color, words_per_block=words_per_block, gap_limit=gap_limit, mode=mode, vertical_position=vertical_position, alignment=alignment, font=font, outline_color=outline_color, shadow_color=shadow_color, bold=bold, italic=italic, underline=underline, strikeout=strikeout, border_style=border_style, outline_thickness=outline_thickness, shadow_size=shadow_size):
+    def generate_ass(json_data, output_file, base_color=base_color, base_size=base_size, highlight_size=highlight_size, highlight_color=highlight_color, words_per_block=words_per_block, gap_limit=gap_limit, mode=mode, vertical_position=vertical_position, alignment=alignment, font=font, outline_color=outline_color, shadow_color=shadow_color, bold=bold, italic=italic, underline=underline, strikeout=strikeout, border_style=border_style, outline_thickness=outline_thickness, shadow_size=shadow_size, timeline_data=None):
         header_ass = f"""[Script Info]
     Title: Dynamic Subtitles
     ScriptType: v4.00+
@@ -107,7 +107,34 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
                         elif mode == "palavra_por_palavra": 
                             line = block[j]['word'].strip()
 
-                        f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{line}\n")
+                        # Check dynamic timeline for this specific time
+                        pos_tag = ""
+                        
+                        if timeline_data:
+                            # Verify if middle of subtitle is in a '2' mode segment
+                            mid_time = (start_sec + end_sec) / 2
+                            found_mode = "1"
+                            for seg in timeline_data:
+                                if seg['start'] <= mid_time <= seg['end']:
+                                    found_mode = seg['mode']
+                                    break
+                            
+                            if found_mode == "2":
+                                 # Force Center
+                                 x_pos = 1080 // 2
+                                 y_pos = 1920 // 2
+                                 current_line_alignment = 5 # Center
+                                 
+                                 # Apply Override Tags: {\anX\pos(X,Y)}
+                                 pos_tag = f"{{\\an{current_line_alignment}\\pos({y_pos})}}"
+                                 final_line = f"{pos_tag}{line}"
+                            else:
+                                 # Mode 1: Respect User Config (Standard Style)
+                                 final_line = line
+                        else:
+                            final_line = line
+
+                        f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{final_line}\n")
 
     def format_time_ass(time_seconds):
         hours = int(time_seconds // 3600)
@@ -140,32 +167,53 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
             input_path = os.path.join(input_dir, filename)
             output_filename = os.path.splitext(filename)[0] + ".ass"
             output_path = os.path.join(output_dir, output_filename)
+            
+            # Look for timeline file
+            # filename is "final-outputXXX_processed.json"
+            # timeline is "final-outputXXX_timeline.json" ? No, output_file was in 'final' folder
+            # edit_video: timeline_file = output_file.replace(".mp4", "_timeline.json")
+            # output_file was "final/temp_video_no_audio_{index}.mp4" -> "final/temp_video_no_audio_{index}_timeline.json"
+            
+            # We need to map filename to index to find timeline
+            # Current filename: "final-output000_processed.json"
+            match = re.search(r"output(\d+)", filename)
+            timeline_data = None
+            if match:
+                 idx = int(match.group(1))
+                 # Construct path to timeline
+                 # edit_video saved it in 'final_folder' which is inside project_folder/final
+                 # Pattern: temp_video_no_audio_{index}_timeline.json
+                 timeline_path = os.path.join(project_folder, "final", f"temp_video_no_audio_{idx}_timeline.json")
+                 if os.path.exists(timeline_path):
+                     try:
+                         with open(timeline_path, "r") as tf:
+                             timeline_data = json.load(tf)
+                         print(f"  -> Found dynamic timeline for video {idx}")
+                     except:
+                         pass
 
             # Load JSON file
             with open(input_path, "r", encoding="utf-8") as file:
                 json_data = json.load(file)
             
-            # Determine alignment dynamically
-            base_name = os.path.splitext(filename)[0] # e.g., final-output000_processed
-
-            # Extract key matching edit_video log (outputXXX)
-            # filenames are like "final-output000_processed.json" -> key "output000"
+            # Determine static alignment (fallback)
+            base_name = os.path.splitext(filename)[0] 
             key_match = re.search(r"(output\d+)", base_name)
             key = key_match.group(1) if key_match else base_name
             
-            # Check for '2' mode
             current_alignment = alignment
             current_vertical_position = vertical_position
             
             mode_face = face_modes.get(key)
+            if mode_face == "2" and not timeline_data: # Only use static if no timeline
+                current_alignment = 5 
+                current_vertical_position = 0 
+                # print(f"  -> Video {base_name}: 2 Faces detected (static). Using Center Subtitles.")
 
-            if mode_face == "2":
-                current_alignment = 5 # Center
-                current_vertical_position = 0 # Middle
-                print(f"  -> Video {base_name}: 2 Faces detected. Using Center Subtitles.")
-
-            # Generate ASS file
-            generate_ass(json_data, output_path, mode=mode, words_per_block=words_per_block, vertical_position=current_vertical_position, alignment=current_alignment)
+            # Generate ASS file with dynamic timeline support
+            generate_ass(json_data, output_path, mode=mode, words_per_block=words_per_block, 
+                         vertical_position=current_vertical_position, alignment=current_alignment,
+                         timeline_data=timeline_data)
 
             print(f"Processed file: {filename} -> {output_filename}")
 

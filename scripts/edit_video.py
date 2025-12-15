@@ -435,6 +435,10 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     frame_2_face_count = 0
 
     buffered_frame = None
+    
+    # Timeline tracking: list of (frame_index, mode_str)
+    # We will compress this later.
+    timeline_frames = [] # Store mode for *every written frame* or at least detection points
 
     for frame_index in range(total_frames):
         if buffered_frame is not None:
@@ -573,20 +577,63 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
              rect1 = (f1[0], f1[1], f1[2]-f1[0], f1[3]-f1[1])
              rect2 = (f2[0], f2[1], f2[2]-f2[0], f2[3]-f2[1])
              result = crop_and_resize_two_faces(frame, [rect1, rect2])
+             timeline_frames.append((frame_index, "2"))
         else:
              frame_1_face_count += 1
              # 1 face
              # current_faces[0] is [x1, y1, x2, y2]
              result = crop_and_resize_insightface(frame, current_faces[0])
+             timeline_frames.append((frame_index, "1"))
              
         out.write(result)
 
     cap.release()
     out.release()
     
+    # Compress timeline into segments
+    # [(start_time, end_time, mode), ...]
+    compressed_timeline = []
+    if timeline_frames:
+        curr_mode = timeline_frames[0][1]
+        start_f = timeline_frames[0][0]
+        
+        for i in range(1, len(timeline_frames)):
+            frame_idx, mode = timeline_frames[i]
+            if mode != curr_mode:
+                # End current segment
+                # Convert frame to seconds
+                end_f = timeline_frames[i-1][0]
+                compressed_timeline.append({
+                    "start": float(start_f) / fps,
+                    "end": float(end_f) / fps, # or frame_idx / fps for continuity
+                    "mode": curr_mode
+                })
+                # Start new
+                curr_mode = mode
+                start_f = frame_idx
+        
+        # Add last
+        end_f = timeline_frames[-1][0]
+        compressed_timeline.append({
+             "start": float(start_f) / fps,
+             "end": (float(end_f) + 1) / fps,
+             "mode": curr_mode
+        })
+    
+    # Save timeline JSON
+    timeline_file = output_file.replace(".mp4", "_timeline.json")
+    try:
+        import json
+        with open(timeline_file, "w") as f:
+            json.dump(compressed_timeline, f)
+        print(f"Timeline saved: {timeline_file}")
+    except Exception as e:
+        print(f"Error saving timeline: {e}")
+
     finalize_video(input_file, output_file, index, fps, project_folder, final_folder)
     
-    if frame_2_face_count > frame_1_face_count:
+    # Return dominant mode logic (or keep 15% rule as overall fallback)
+    if frame_2_face_count > (total_frames * 0.15):
         return "2"
     return "1"
 
