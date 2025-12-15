@@ -28,20 +28,21 @@ Confira as melhorias mais recentes:
 - **Exportação em Lote**: Gera um arquivo ZIP com todos os vídeos virais criados, facilitando o download e compartilhamento.
 - **Legenda personalizada**: Você cria uma legenda personalizada com cores, highlight, sem highlight ou palavra por palavra, tendo uma ampla possibilidade de edição.
 
-
+<!--
 ## **Como Usar**
-<!-- 
+ 
 Entre no link e siga os passos na ordem:<br> [![Open In Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252)](https://colab.research.google.com/drive/1gcxImzBt0ObWLfW3ThEcwqKhasB4WpgX?usp=sharing)
 HF [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)]()
--->
+
 - Entre no link e siga os passos na ordem: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1UZKzeqjIeEyvq9nPx7s_4mU6xlkZQn_R?usp=sharing#scrollTo=pa36OeArowme) <br>
 - Versão simplificada sem opção de mudança de texto [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1aDNLtoJZa9Z0lKcYTR6CGNMgZ_iTpwJD?usp=sharing) <br>
-- Criei esse site para ajudar a dividir a trascrição, já que ChatGPT tem limites: [Split text for ChatGPT](https://rafaelgodoyebert.github.io/ViralCutter/)
+-->
 
 ## **Limitações**
 
-- O tempo de processamento pode ser elevado para vídeos longos.
 - A qualidade dos vídeos gerados pode variar com base na qualidade do vídeo original.
+- O tempo de processamento depende fortemente da sua GPU.
+- O modelo **G4F** pode ser instável ou ter limites de requisição. Use **Gemini** para maior estabilidade mas precisa de api_key.
 
 ## Inspiração:
 Este projeto foi inspirado nos seguintes repositórios:
@@ -122,11 +123,6 @@ python main_improved.py --url "https://youtu.be/EXEMPLO" --segments 3 --ai-backe
 -   `--workflow`: `1` (Completo) ou `2` (Apenas Corte, sem legendas/crop).
 
 ---
-
-## **Limitações**
-
--   O tempo de processamento depende fortemente da sua GPU.
--   O modelo **G4F** pode ser instável ou ter limites de requisição. Use **Gemini** para maior estabilidade.
 
 ## **Contribuições**
 Quer ajudar a tornar o ViralCutter ainda melhor? Se você tiver sugestões ou quiser contribuir com o código, fique à vontade para abrir uma issue ou enviar um pull request no nosso repositório do GitHub.
