@@ -48,6 +48,8 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(header_ass)
 
+            last_end_time = 0.0
+
             for segment in json_data.get('segments', []):
                 words = segment.get('words', [])
                 total_words = len(words)
@@ -72,42 +74,40 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
                     start_times = [word.get('start', 0) for word in block]
                     end_times = [word.get('end', 0) for word in block]
 
-                    if mode == "highlight":
-                        for j in range(len(block)):
-                            line = ""
+                    for j in range(len(block)):
+                        start_sec = start_times[j]
+                        end_sec = end_times[j]
+
+                        # Prevent overlap and close gaps
+                        if start_sec - last_end_time < gap_limit:
+                            start_sec = last_end_time
+
+                        # Ensure valid duration
+                        if end_sec < start_sec:
+                            end_sec = start_sec
+
+                        start_time_ass = format_time_ass(start_sec)
+                        end_time_ass = format_time_ass(end_sec)
+                        
+                        last_end_time = end_sec
+
+                        line = ""
+                        if mode == "highlight":
                             for k, word_data in enumerate(block):
                                 word = word_data['word']
                                 if k == j:
                                     line += f"{{\\fs{highlight_size}\\c{highlight_color}}}{word} "
                                 else:
                                     line += f"{{\\fs{base_size}\\c{base_color}}}{word} "
+                            line = line.strip()
 
-                            start_time_ass = format_time_ass(start_times[j])
-                            if j > 0 and (start_times[j] - end_times[j - 1] < gap_limit):
-                                start_time_ass = format_time_ass(end_times[j - 1])
+                        elif mode == "sem_higlight": 
+                            line = " ".join(word_data['word'] for word_data in block).strip()
 
-                            end_time_ass = format_time_ass(end_times[j])
+                        elif mode == "palavra_por_palavra": 
+                            line = block[j]['word'].strip()
 
-                            f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{line.strip()}\n")
-
-                    elif mode == "sem_higlight": # Keeping value as it might be used elsewhere, or should I translate it? 'no_highlight' preferrably but depends on caller. The caller is main.py, I will change it there too.
-                        for j in range(len(block)):
-                            line = " ".join(word_data['word'] for word_data in block)
-
-                            start_time_ass = format_time_ass(start_times[j])
-                            if j > 0 and (start_times[j] - end_times[j - 1] < gap_limit):
-                                start_time_ass = format_time_ass(end_times[j - 1])
-
-                            end_time_ass = format_time_ass(end_times[j])
-
-                            f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{line.strip()}\n")
-
-                    elif mode == "palavra_por_palavra": # 'word_by_word'
-                        for j in range(len(block)):
-                            line = block[j]['word']
-                            start_time_ass = format_time_ass(start_times[j])
-                            end_time_ass = format_time_ass(end_times[j])
-                            f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{line.strip()}\n")
+                        f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{line}\n")
 
     def format_time_ass(time_seconds):
         hours = int(time_seconds // 3600)
@@ -146,17 +146,23 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
                 json_data = json.load(file)
             
             # Determine alignment dynamically
-            base_name = os.path.splitext(filename)[0]
+            base_name = os.path.splitext(filename)[0] # e.g., final-output000_processed
+
+            # Extract key matching edit_video log (outputXXX)
+            # filenames are like "final-output000_processed.json" -> key "output000"
+            key_match = re.search(r"(output\d+)", base_name)
+            key = key_match.group(1) if key_match else base_name
             
             # Check for '2' mode
             current_alignment = alignment
             current_vertical_position = vertical_position
             
-            mode_face = face_modes.get(base_name)
+            mode_face = face_modes.get(key)
+
             if mode_face == "2":
                 current_alignment = 5 # Center
                 current_vertical_position = 0 # Middle
-                # print(f"  -> Video {base_name}: 2 Faces detected. Using Center Subtitles.")
+                print(f"  -> Video {base_name}: 2 Faces detected. Using Center Subtitles.")
 
             # Generate ASS file
             generate_ass(json_data, output_path, mode=mode, words_per_block=words_per_block, vertical_position=current_vertical_position, alignment=current_alignment)

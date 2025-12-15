@@ -28,9 +28,9 @@ Confira as melhorias mais recentes:
 - **Exportação em Lote**: Gera um arquivo ZIP com todos os vídeos virais criados, facilitando o download e compartilhamento.
 - **Legenda personalizada**: Você cria uma legenda personalizada com cores, highlight, sem highlight ou palavra por palavra, tendo uma ampla possibilidade de edição.
 
-<!--
+
 ## **Como Usar**
- 
+<!--
 Entre no link e siga os passos na ordem:<br> [![Open In Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252)](https://colab.research.google.com/drive/1gcxImzBt0ObWLfW3ThEcwqKhasB4WpgX?usp=sharing)
 HF [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)]()
 -->

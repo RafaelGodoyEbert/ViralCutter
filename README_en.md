@@ -28,9 +28,9 @@ Check out the latest improvements:
 - **Batch Export**: Generates a ZIP file with all created viral videos, facilitating download and sharing.
 - **Custom Captions**: Create custom captions with colors, highlights, no highlights, or word-by-word styles, offering extensive editing possibilities.
 
-<!--
+
 ## **How to Use**
- 
+<!--
 Open the link and follow the steps in order:<br> [![Open In Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252)](https://colab.research.google.com/drive/1gcxImzBt0ObWLfW3ThEcwqKhasB4WpgX?usp=sharing)
 HF [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)]()
 -->

@@ -115,6 +115,7 @@ def main():
     parser.add_argument("--face-model", choices=["insightface", "mediapipe"], default="insightface", help="Face detection model")
     parser.add_argument("--face-mode", choices=["auto", "1", "2"], default="auto", help="Face tracking mode: auto, 1, 2")
     parser.add_argument("--subtitle-config", help="Path to subtitle configuration JSON file")
+    parser.add_argument("--face-detect-interval", type=str, default="0.17,1.0", help="Face detection interval in seconds. Single value or 'interval_1face,interval_2face'")
     parser.add_argument("--skip-prompts", action="store_true", help="Skip interactive prompts and use defaults/existing files")
 
     args = parser.parse_args()
@@ -297,10 +298,28 @@ def main():
     # We will assume CLI defaults are what we want if skip_prompts is on.
     
     if not args.burn_only and not args.skip_prompts:
-        # Prompt only if user didn't explicitly pass flags (hard to detect with defaults set, but let's assume if running interactively we might want to change?)
-        # Actually, best practice: if --skip-prompts is NOT set, we offer choices IF they differ from "detected"?
-        # But for 'viral_cutter.ipynb', we want to control everything via 'skip_prompts' flag passed from the notebook.
-        pass # We use the argparse defaults or passed values.
+        # Interactive Face Config
+        print(i18n("\n--- Face Detection Settings ---"))
+        print(i18n("Current Face Model: {} | Mode: {}").format(face_model, face_mode))
+        
+        detection_intervals = None
+        if args.face_detect_interval:
+             try:
+                 parts = args.face_detect_interval.split(',')
+                 if len(parts) == 1:
+                     val = float(parts[0])
+                     detection_intervals = {'1': val, '2': val}
+                     print(i18n("Custom detection interval set: {}s for both modes").format(val))
+                 elif len(parts) >= 2:
+                     val1 = float(parts[0])
+                     val2 = float(parts[1])
+                     detection_intervals = {'1': val1, '2': val2}
+                     print(i18n("Custom detection interval set: {}s (1-face), {}s (2-face)").format(val1, val2))
+             except ValueError:
+                 print(i18n("Invalid format for face-detect-interval. Using defaults."))
+        else:
+             print(i18n("Using dynamic intervals: 1s for 2-face, ~0.16s for 1-face."))
+
 
     # Pipeline Execution
     try:
@@ -394,7 +413,7 @@ def main():
 
         # 5. Edit Video (Face Crop)
         print(i18n("Editing video with {} (Mode: {})...").format(face_model, face_mode))
-        edit_video.edit(project_folder=project_folder, face_model=face_model, face_mode=face_mode)
+        edit_video.edit(project_folder=project_folder, face_model=face_model, face_mode=face_mode, detection_period=detection_intervals)
 
         # 6. Subtitles
         burn_subtitles_option = True 
@@ -405,11 +424,7 @@ def main():
             
             sub_config = get_subtitle_config(args.subtitle_config)
             
-            # Dynamic Subtitle Adjustment for 2-Face Mode
-            if face_mode == "2":
-                print(i18n("Configuring subtitles for Split Screen (Center Position)..."))
-                sub_config["alignment"] = 5 # Alignment 5 = Middle Central
-                sub_config["vertical_position"] = 0 # Center exactly
+
             
             # Passa o dicionário desempacotado como argumentos, mais o project_folder
             adjust_subtitles.adjust(project_folder=project_folder, **sub_config)
