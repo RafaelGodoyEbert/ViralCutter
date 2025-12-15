@@ -1,8 +1,8 @@
 import os
 import json
 
-def save_viral_segments(segments_data=None):
-    output_txt_file = "tmp/viral_segments.txt"
+def save_viral_segments(segments_data=None, project_folder="tmp"):
+    output_txt_file = os.path.join(project_folder, "viral_segments.txt")
 
     # Verifica se o arquivo já existe
     if not os.path.exists(output_txt_file):
