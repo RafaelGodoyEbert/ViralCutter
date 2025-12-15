@@ -2,50 +2,50 @@ import json
 import re
 import os
 
-def adjust(base_color, base_size, h_size, highlight_color, palavras_por_bloco, limite_gap, modo, posicao_vertical, alinhamento, fonte, contorno, cor_da_sombra,negrito,italico, sublinhado, tachado, estilo_da_borda,espessura_do_contorno, tamanho_da_sombra):
-    def gerar_ass(json_data, arquivo_saida, base_color=base_color, base_size=base_size, h_size=h_size, highlight_color=highlight_color, palavras_por_bloco=palavras_por_bloco, limite_gap=limite_gap, modo=modo, posicao_vertical=posicao_vertical, alinhamento=alinhamento, fonte=fonte, contorno=contorno, cor_da_sombra=cor_da_sombra, negrito=negrito, italico=italico, sublinhado=sublinhado, tachado=tachado, estilo_da_borda=estilo_da_borda, espessura_do_contorno=espessura_do_contorno, tamanho_da_sombra=tamanho_da_sombra):
+def adjust(base_color, base_size, highlight_size, highlight_color, words_per_block, gap_limit, mode, vertical_position, alignment, font, outline_color, shadow_color, bold, italic, underline, strikeout, border_style, outline_thickness, shadow_size, project_folder="tmp"):
+    def generate_ass(json_data, output_file, base_color=base_color, base_size=base_size, highlight_size=highlight_size, highlight_color=highlight_color, words_per_block=words_per_block, gap_limit=gap_limit, mode=mode, vertical_position=vertical_position, alignment=alignment, font=font, outline_color=outline_color, shadow_color=shadow_color, bold=bold, italic=italic, underline=underline, strikeout=strikeout, border_style=border_style, outline_thickness=outline_thickness, shadow_size=shadow_size):
         header_ass = f"""[Script Info]
-    Title: Legendas Dinâmicas
+    Title: Dynamic Subtitles
     ScriptType: v4.00+
     PlayDepth: 0
 
     [V4+ Styles]
     Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-    Style: Default,{fonte},{base_size},{base_color},&H00000000,{contorno},{cor_da_sombra},{negrito},{italico},{sublinhado},{tachado},100,100,0,0,{estilo_da_borda},{espessura_do_contorno},{tamanho_da_sombra},{alinhamento},-2,-2,{posicao_vertical},1
+    Style: Default,{font},{base_size},{base_color},&H00000000,{outline_color},{shadow_color},{bold},{italic},{underline},{strikeout},100,100,0,0,{border_style},{outline_thickness},{shadow_size},{alignment},-2,-2,{vertical_position},1
 
     [Events]
     Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     """
-# Style: Default,{fonte},{base_size},{base_color},&H00000000,{contorno},{cor_da_sombra},{negrito},{italico},{sublinhado},{tachado},100,100,0,0,1,1.5,0,{alinhamento},-2,-2,{posicao_vertical},1
+# Style: Default,{font},{base_size},{base_color},&H00000000,{outline_color},{shadow_color},{bold},{italic},{underline},{strikeout},100,100,0,0,1,1.5,0,{alignment},-2,-2,{vertical_position},1
 
-#       1. **Name**: `Default` - Nome do estilo.
-# 2. **Fontname**: `{fonte}` - Nome da fonte usada.
-# 3. **Fontsize**: `{base_size}` - Tamanho da fonte.
-# 4. **PrimaryColour**: `{base_color}` - Cor primária do texto.
-#       5. **SecondaryColour**: `&H00000000` - Cor secundária do texto (usada para karaokê).
-# 6. **OutlineColour**: `{contorno}` - Cor do contorno do texto.
-# 7. **BackColour**: `{cor_da_sombra}` - Cor de fundo do texto.
-# 8. **Bold**: `{negrito}` - Negrito (1 para ativar, 0 para desativar).
-# 9. **Italic**: `{italico}` - Itálico (1 para ativar, 0 para desativar).
-# 10. **Underline**: `{sublinhado}` - Sublinhado (1 para ativar, 0 para desativar).
-# 11. **StrikeOut**: `{tachado}` - Tachado (1 para ativar, 0 para desativar).
+#       1. **Name**: `Default` - Style name.
+# 2. **Fontname**: `{font}` - Font name used.
+# 3. **Fontsize**: `{base_size}` - Font size.
+# 4. **PrimaryColour**: `{base_color}` - Primary text color.
+#       5. **SecondaryColour**: `&H00000000` - Secondary text color (used for karaoke).
+# 6. **OutlineColour**: `{outline_color}` - Text outline color.
+# 7. **BackColour**: `{shadow_color}` - Text background/shadow color.
+# 8. **Bold**: `{bold}` - Bold (1 to enable, 0 to disable).
+# 9. **Italic**: `{italic}` - Italic (1 to enable, 0 to disable).
+# 10. **Underline**: `{underline}` - Underline (1 to enable, 0 to disable).
+# 11. **StrikeOut**: `{strikeout}` - Strikeout (1 to enable, 0 to disable).
 
-#       12. **ScaleX**: `100` - Escala horizontal do texto (em porcentagem).
-#       13. **ScaleY**: `100` - Escala vertical do texto (em porcentagem).
-#       14. **Spacing**: `0` - Espaçamento entre caracteres.
-#        15. **Angle**: `0` - Ângulo de rotação do texto.
+#       12. **ScaleX**: `100` - Horizontal text scale (percentage).
+#       13. **ScaleY**: `100` - Vertical text scale (percentage).
+#       14. **Spacing**: `0` - Character spacing.
+#        15. **Angle**: `0` - Text rotation angle.
 
-# 16. **BorderStyle**: `{estilo_da_borda}` - Estilo da borda (1 para contorno, 3 para caixa).
-# 17. **Outline**: `{espessura_do_contorno}` - Espessura do contorno.
-# 18. **Shadow**: `{tamanho_da_sombra}` - Tamanho da sombra.
-# 19. **Alignment**: `{alinhamento}` - Alinhamento do texto (1 = inferior esquerdo, 2 = inferior central, 3 = inferior direito, 4 = meio esquerdo, 5 = meio central, 6 = meio direito, 7 = superior esquerdo, 8 = superior central, 9 = superior direito)
+# 16. **BorderStyle**: `{border_style}` - Border style (1 for outline, 3 for box).
+# 17. **Outline**: `{outline_thickness}` - Outline thickness.
+# 18. **Shadow**: `{shadow_size}` - Shadow size.
+# 19. **Alignment**: `{alignment}` - Text alignment (1=bottom left, 2=bottom center, 3=bottom right, etc.)
 
-#       20. **MarginL**: `-2` - Margem esquerda.
-#       21. **MarginR**: `-2` - Margem direita.
-#       22. **MarginV**: `60` - Margem vertical.
-#       23. **Encoding**: `1` - Codificação da fonte (0 para ANSI, 1 para Default, etc.).
+#       20. **MarginL**: `-2` - Left margin.
+#       21. **MarginR**: `-2` - Right margin.
+#       22. **MarginV**: `60` - Vertical margin.
+#       23. **Encoding**: `1` - Font encoding.
 
-        with open(arquivo_saida, "w", encoding="utf-8") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             f.write(header_ass)
 
             for segment in json_data.get('segments', []):
@@ -55,7 +55,7 @@ def adjust(base_color, base_size, h_size, highlight_color, palavras_por_bloco, l
                 i = 0
                 while i < total_words:
                     block = []
-                    while len(block) < palavras_por_bloco and i < total_words:
+                    while len(block) < words_per_block and i < total_words:
                         current_word = words[i]
                         if 'word' in current_word:
                             cleaned_word = re.sub(r'[.,!?;]', '', current_word['word'])
@@ -72,37 +72,37 @@ def adjust(base_color, base_size, h_size, highlight_color, palavras_por_bloco, l
                     start_times = [word.get('start', 0) for word in block]
                     end_times = [word.get('end', 0) for word in block]
 
-                    if modo == "highlight":
+                    if mode == "highlight":
                         for j in range(len(block)):
                             line = ""
                             for k, word_data in enumerate(block):
                                 word = word_data['word']
                                 if k == j:
-                                    line += f"{{\\fs{h_size}\\c{highlight_color}}}{word} "
+                                    line += f"{{\\fs{highlight_size}\\c{highlight_color}}}{word} "
                                 else:
                                     line += f"{{\\fs{base_size}\\c{base_color}}}{word} "
 
                             start_time_ass = format_time_ass(start_times[j])
-                            if j > 0 and (start_times[j] - end_times[j - 1] < limite_gap):
+                            if j > 0 and (start_times[j] - end_times[j - 1] < gap_limit):
                                 start_time_ass = format_time_ass(end_times[j - 1])
 
                             end_time_ass = format_time_ass(end_times[j])
 
                             f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{line.strip()}\n")
 
-                    elif modo == "sem_higlight":
+                    elif mode == "sem_higlight": # Keeping value as it might be used elsewhere, or should I translate it? 'no_highlight' preferrably but depends on caller. The caller is main.py, I will change it there too.
                         for j in range(len(block)):
                             line = " ".join(word_data['word'] for word_data in block)
 
                             start_time_ass = format_time_ass(start_times[j])
-                            if j > 0 and (start_times[j] - end_times[j - 1] < limite_gap):
+                            if j > 0 and (start_times[j] - end_times[j - 1] < gap_limit):
                                 start_time_ass = format_time_ass(end_times[j - 1])
 
                             end_time_ass = format_time_ass(end_times[j])
 
                             f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{line.strip()}\n")
 
-                    elif modo == "palavra_por_palavra":
+                    elif mode == "palavra_por_palavra": # 'word_by_word'
                         for j in range(len(block)):
                             line = block[j]['word']
                             start_time_ass = format_time_ass(start_times[j])
@@ -116,27 +116,51 @@ def adjust(base_color, base_size, h_size, highlight_color, palavras_por_bloco, l
         centiseconds = int((time_seconds % 1) * 100)
         return f"{hours:01}:{minutes:02}:{seconds:02}.{centiseconds:02}"
 
-    # Diretórios de entrada e saída
-    input_dir = "subs"
-    output_dir = "subs_ass"
+    # Input and Output Directories
+    input_dir = os.path.join(project_folder, "subs")
+    output_dir = os.path.join(project_folder, "subs_ass")
 
-    # Criar o diretório de saída se não existir
+    # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
 
-    # Processar todos os arquivos JSON na pasta de entrada
+    # Load face modes if available
+    face_modes = {}
+    modes_file = os.path.join(project_folder, "face_modes.json")
+    if os.path.exists(modes_file):
+        try:
+             with open(modes_file, "r") as f:
+                 face_modes = json.load(f)
+             print("Loaded face modes for dynamic subtitle positioning.")
+        except Exception as e:
+            print(f"Could not load face modes: {e}")
+
+    # Process all JSON files in input directory
     for filename in os.listdir(input_dir):
         if filename.endswith(".json"):
             input_path = os.path.join(input_dir, filename)
             output_filename = os.path.splitext(filename)[0] + ".ass"
             output_path = os.path.join(output_dir, output_filename)
 
-            # Carregar o arquivo JSON
+            # Load JSON file
             with open(input_path, "r", encoding="utf-8") as file:
                 json_data = json.load(file)
+            
+            # Determine alignment dynamically
+            base_name = os.path.splitext(filename)[0]
+            
+            # Check for '2' mode
+            current_alignment = alignment
+            current_vertical_position = vertical_position
+            
+            mode_face = face_modes.get(base_name)
+            if mode_face == "2":
+                current_alignment = 5 # Center
+                current_vertical_position = 0 # Middle
+                # print(f"  -> Video {base_name}: 2 Faces detected. Using Center Subtitles.")
 
-            # Gerar o arquivo ASS
-            gerar_ass(json_data, output_path, modo=modo, palavras_por_bloco=palavras_por_bloco, posicao_vertical=posicao_vertical, alinhamento=alinhamento)
+            # Generate ASS file
+            generate_ass(json_data, output_path, mode=mode, words_per_block=words_per_block, vertical_position=current_vertical_position, alignment=current_alignment)
 
-            print(f"Arquivo processado: {filename} -> {output_filename}")
+            print(f"Processed file: {filename} -> {output_filename}")
 
-    print("Todos os arquivos JSON foram processados e convertidos para ASS.")
+    print("All JSON files processed and converted to ASS.")

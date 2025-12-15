@@ -1,0 +1,8 @@
+g4f[all]
+yt-dlp
+ffmpeg-python
+whisperx
+mediapipe
+google-genai
+insightface
+onnxruntime-gpu
