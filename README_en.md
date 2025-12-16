@@ -19,6 +19,13 @@ Check out the latest improvements:
 
 *(See [changelog.md](changelog.md) for full details)*
 
+## **Interface**
+![WebUi Home](https://github.com/user-attachments/assets/d23fe5dc-90a6-4ea8-947c-3ecbd8e54402)
+*Main Screen: OpusClip-style gallery and intuitive controls*
+
+![WebUI Settings](https://github.com/user-attachments/assets/e588e6b0-84cf-422b-8ddd-6c78ec17e345)
+*Settings: AI adjustment, captions, and log viewer*
+
 ## **Features**
 
 - **Video Download**: Downloads YouTube videos via a provided URL.
