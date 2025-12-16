@@ -9,6 +9,8 @@ ViralCutter é uma ferramenta inovadora para gerar vídeos virais a partir de co
 
 Confira as melhorias mais recentes:
 
+-   **Nova WebUI (Gradio)**: Interface gráfica moderna inspirada no OpusClip, facilitando o uso de todas as ferramentas.
+-   **Instalação Rápida (UV)**: Novo script `.bat` que utiliza o `uv` para instalar dependências de forma muito mais rápida.
 -   **Otimização de Performance**: "Slicing" de transcrição implementado. O vídeo é transcrito apenas uma vez, e os cortes reutilizam os dados, eliminando reprocessamento.
 -   **Suporte a IA Flexível**: Integração nativa com **Gemini API** e suporte experimental ao **G4F** (GPT-4 Free), além de modo Manual.
 -   **Configuração Externa**: Arquivos `api_config.json` e `prompt.txt` para fácil personalização sem mexer no código.
@@ -82,6 +84,11 @@ https://github.com/user-attachments/assets/ca7ebb9c-52ba-4171-a513-625bef690a2b
 
 ### Configuração
 1.  **Instale as dependências**:
+    
+    **Opção A (Recomendada - Rápida)**:
+    Execute o arquivo `install_dependencies.bat`. Ele usará o `uv` para instalar tudo rapidamente.
+
+    **Opção B (Manual)**:
     ```bash
     pip install -r requirements.txt
     ```
@@ -99,6 +106,13 @@ https://github.com/user-attachments/assets/ca7ebb9c-52ba-4171-a513-625bef690a2b
     ```
 
 ### Executando
+
+#### Interface Gráfica (WebUI)
+Para usar a nova interface visual:
+Dê um duplo clique em `run_webui.bat` ou execute:
+```bash
+.\run_webui.bat
+```
 
 #### Modo Interativo (Simples)
 Basta rodar o script e seguir as instruções na tela:

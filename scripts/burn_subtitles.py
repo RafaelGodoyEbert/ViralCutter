@@ -56,28 +56,37 @@ def burn(project_folder="tmp"):
                 # Para garantir, usamos replace e forward slashes.
                 subtitle_file_ffmpeg = subtitle_file.replace('\\', '/').replace(':', '\\:')
 
-                # Comando FFmpeg para adicionar as legendas
-                command = [
-                    "ffmpeg", "-y", "-loglevel", "error", "-hide_banner",
-                    '-i', os.path.join(videos_folder, video_file),  # Vídeo de entrada
-                    '-vf', f"subtitles='{subtitle_file_ffmpeg}'",  # Filtro de legendas
-                    '-c:v', 'h264_nvenc',  # Codificador NVIDIA
-                    '-preset', 'p1',  # Preset para velocidade
-                    '-b:v', '5M',  # Bitrate
-                    '-c:a', 'copy',  # Copia o áudio
-                    output_file
-                ]
+                # Funcao interna para encode logic
+                def run_ffmpeg(encoder, preset, additional_args=[]):
+                    cmd = [
+                        "ffmpeg", "-y", "-loglevel", "error", "-hide_banner",
+                        '-i', os.path.join(videos_folder, video_file),
+                        '-vf', f"subtitles='{subtitle_file_ffmpeg}'",
+                        '-c:v', encoder,
+                        '-preset', preset,
+                        '-b:v', '5M',
+                        '-pix_fmt', 'yuv420p',
+                        '-c:a', 'copy',
+                        output_file
+                    ] + additional_args
+                    subprocess.run(cmd, check=True, capture_output=True)
 
-                # Log
-                print(f"Processando vídeo: {video_file}")
-                # print(f"Comando: {' '.join(command)}")
-
-                # Executa o comando
+                # Tentar NVENC primeiro
                 try:
-                    subprocess.run(command, check=True, capture_output=True)
+                    print(f"Processando vídeo (NVENC): {video_file}")
+                    run_ffmpeg("h264_nvenc", "p1")
                     print(f"Processado: {output_file}")
                 except subprocess.CalledProcessError as e:
-                    print(f"Erro ao queimar legendas em {video_name}: {e}")
+                    print(f"Erro com NVENC ({str(e)}). Tentando CPU (libx264)...")
+                    try:
+                        # Fallback CPU
+                        run_ffmpeg("libx264", "ultrafast")
+                        print(f"Processado (CPU): {output_file}")
+                    except subprocess.CalledProcessError as e2:
+                        print(f"ERRO FATAL ao queimar legendas em {video_name}: {e2}")
+                        # Check output of ffmpeg if possible
+                        if e2.stderr:
+                             print(f"FFmpeg Log: {e2.stderr.decode('utf-8')}")
             else:
                 print(f"Legenda não encontrada para: {video_name} em {subtitle_file}")
 

@@ -1,0 +1,18 @@
+[Script Info]
+Title: Dynamic Subtitles
+ScriptType: v4.00+
+PlayDepth: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Roboto,12,&H00D3D3D3,&H00000000,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,1,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:00.41,Default,,0,0,0,,{\fs26\c&H00FFFFFF}This {\fs24\c&H00D3D3D3}is {\fs24\c&H00D3D3D3}a {\fs24\c&H00D3D3D3}preview {\fs24\c&H00D3D3D3}of
+Dialogue: 0,0:00:00.41,0:00:00.55,Default,,0,0,0,,{\fs24\c&H00D3D3D3}This {\fs26\c&H00FFFFFF}is {\fs24\c&H00D3D3D3}a {\fs24\c&H00D3D3D3}preview {\fs24\c&H00D3D3D3}of
+Dialogue: 0,0:00:00.55,0:00:00.64,Default,,0,0,0,,{\fs24\c&H00D3D3D3}This {\fs24\c&H00D3D3D3}is {\fs26\c&H00FFFFFF}a {\fs24\c&H00D3D3D3}preview {\fs24\c&H00D3D3D3}of
+Dialogue: 0,0:00:00.64,0:00:01.14,Default,,0,0,0,,{\fs24\c&H00D3D3D3}This {\fs24\c&H00D3D3D3}is {\fs24\c&H00D3D3D3}a {\fs26\c&H00FFFFFF}preview {\fs24\c&H00D3D3D3}of
+Dialogue: 0,0:00:01.14,0:00:01.27,Default,,0,0,0,,{\fs24\c&H00D3D3D3}This {\fs24\c&H00D3D3D3}is {\fs24\c&H00D3D3D3}a {\fs24\c&H00D3D3D3}preview {\fs26\c&H00FFFFFF}of
+Dialogue: 0,0:00:01.27,0:00:01.47,Default,,0,0,0,,{\fs26\c&H00FFFFFF}your {\fs24\c&H00D3D3D3}subtitles
+Dialogue: 0,0:00:01.47,0:00:02.34,Default,,0,0,0,,{\fs24\c&H00D3D3D3}your {\fs26\c&H00FFFFFF}subtitles

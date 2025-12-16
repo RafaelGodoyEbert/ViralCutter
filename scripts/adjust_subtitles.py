@@ -2,12 +2,14 @@ import json
 import re
 import os
 
-def adjust(base_color, base_size, highlight_size, highlight_color, words_per_block, gap_limit, mode, vertical_position, alignment, font, outline_color, shadow_color, bold, italic, underline, strikeout, border_style, outline_thickness, shadow_size, project_folder="tmp"):
-    def generate_ass(json_data, output_file, base_color=base_color, base_size=base_size, highlight_size=highlight_size, highlight_color=highlight_color, words_per_block=words_per_block, gap_limit=gap_limit, mode=mode, vertical_position=vertical_position, alignment=alignment, font=font, outline_color=outline_color, shadow_color=shadow_color, bold=bold, italic=italic, underline=underline, strikeout=strikeout, border_style=border_style, outline_thickness=outline_thickness, shadow_size=shadow_size, timeline_data=None):
+def adjust(base_color, base_size, highlight_size, highlight_color, words_per_block, gap_limit, mode, vertical_position, alignment, font, outline_color, shadow_color, bold, italic, underline, strikeout, border_style, outline_thickness, shadow_size, uppercase=False, project_folder="tmp", **kwargs):
+    def generate_ass(json_data, output_file, base_color=base_color, base_size=base_size, highlight_size=highlight_size, highlight_color=highlight_color, words_per_block=words_per_block, gap_limit=gap_limit, mode=mode, vertical_position=vertical_position, alignment=alignment, font=font, outline_color=outline_color, shadow_color=shadow_color, bold=bold, italic=italic, underline=underline, strikeout=strikeout, border_style=border_style, outline_thickness=outline_thickness, shadow_size=shadow_size, uppercase=uppercase, timeline_data=None):
         header_ass = f"""[Script Info]
     Title: Dynamic Subtitles
     ScriptType: v4.00+
     PlayDepth: 0
+    PlayResX: 360
+    PlayResY: 640
 
     [V4+ Styles]
     Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
@@ -71,6 +73,13 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
                                     i += 1
                         i += 1
 
+
+                    # Uppercase transformation
+                    if uppercase:
+                         for w_item in block:
+                             if 'word' in w_item:
+                                 w_item['word'] = w_item['word'].upper()
+
                     start_times = [word.get('start', 0) for word in block]
                     end_times = [word.get('end', 0) for word in block]
 
@@ -120,16 +129,17 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
                                     break
                             
                             if found_mode == "2":
-                                 # Force Center
-                                 x_pos = 1080 // 2
-                                 y_pos = 1920 // 2
+                                 # Force Center (Relative to PlayRes 360x640)
+                                 x_pos = 360 // 2  # 180
+                                 y_pos = 640 // 2  # 320
                                  current_line_alignment = 5 # Center
                                  
-                                 # Apply Override Tags: {\anX\pos(X,Y)}
-                                 pos_tag = f"{{\\an{current_line_alignment}\\pos({y_pos})}}"
+                                 # Apply Override Tags: {\an5\pos(x,y)}
+                                 pos_tag = f"{{\\an{current_line_alignment}\\pos({x_pos},{y_pos})}}"
                                  final_line = f"{pos_tag}{line}"
                             else:
                                  # Mode 1: Respect User Config (Standard Style)
+                                 # No pos tag needed, uses Style defaults (MarginV, Alignment)
                                  final_line = line
                         else:
                             final_line = line
@@ -213,6 +223,7 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
             # Generate ASS file with dynamic timeline support
             generate_ass(json_data, output_path, mode=mode, words_per_block=words_per_block, 
                          vertical_position=current_vertical_position, alignment=current_alignment,
+                         uppercase=uppercase,
                          timeline_data=timeline_data)
 
             print(f"Processed file: {filename} -> {output_filename}")

@@ -59,7 +59,7 @@ def call_g4f(prompt, model_name="gpt-4o-mini"):
         print(f"Erro na API do G4F: {e}")
         return "{}"
 
-def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode="manual", api_key=None, project_folder="tmp"):
+def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode="manual", api_key=None, project_folder="tmp", chunk_size_arg=None, model_name_arg=None):
     quantidade_de_virals = num_segments
 
     # Ler transcrição
@@ -101,31 +101,33 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 loaded_config = json.load(f)
-                # Merge simples (profundidade 1 e 2 apenas para chaves conhecidas)
+                # Merge simples
                 if "gemini" in loaded_config: config["gemini"].update(loaded_config["gemini"])
                 if "g4f" in loaded_config: config["g4f"].update(loaded_config["g4f"])
                 if "selected_api" in loaded_config: config["selected_api"] = loaded_config["selected_api"]
         except Exception as e:
             print(f"Erro ao ler api_config.json: {e}. Usando padrões.")
 
-    # Override ai_mode if specified in config and not manual
-    # Mas mantemos o ai_mode passado como argumento se ele não for "manual" (assumindo que "manual" é o default se ninguem passou nada, ou se a UI passou)
-    # Se ai_mode for manual e o user configurou outra coisa no json, podemos usar?
-    # Melhor respeitar o argumento da função: ai_mode
-    
     # Configurar variaveis baseadas no ai_mode
     current_chunk_size = 15000 # default fallback
     model_name = ""
     
     if ai_mode == "gemini":
-        current_chunk_size = config["gemini"].get("chunk_size", 15000)
-        model_name = config["gemini"].get("model", "gemini-2.5-flash-lite-preview-09-2025")
+        cfg_chunk = config["gemini"].get("chunk_size", 15000)
+        current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else cfg_chunk
+        
+        cfg_model = config["gemini"].get("model", "gemini-2.5-flash-lite-preview-09-2025")
+        model_name = model_name_arg if model_name_arg else cfg_model
+        
         if not api_key: # Se não veio por argumento, tenta do config
             api_key = config["gemini"].get("api_key", "")
             
     elif ai_mode == "g4f":
-        current_chunk_size = config["g4f"].get("chunk_size", 2000)
-        model_name = config["g4f"].get("model", "gpt-4o-mini")
+        cfg_chunk = config["g4f"].get("chunk_size", 2000)
+        current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else cfg_chunk
+        
+        cfg_model = config["g4f"].get("model", "gpt-4o-mini")
+        model_name = model_name_arg if model_name_arg else cfg_model
 
     system_prompt_template = ""
     if os.path.exists(prompt_path):

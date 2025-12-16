@@ -6,3 +6,4 @@ mediapipe
 google-genai
 insightface
 onnxruntime-gpu
+gradio

@@ -54,14 +54,14 @@ def get_subtitle_config(config_path=None):
     
     config = {
         "font": "Montserrat-Regular",
-        "base_size": 12,
+        "base_size": 30,
         "base_color": f"&H{base_color_transparency}{COLORS['white']}&",
-        "highlight_size": 14,
+        "highlight_size": 35,
         "words_per_block": 3,
         "gap_limit": 0.5,
         "mode": 'highlight', # Options: 'no_highlight', 'word_by_word', 'highlight'
         "highlight_color": f"&H{highlight_color_transparency}{COLORS['green']}&",
-        "vertical_position": 60, # 1=170(top), ... 4=60(default)
+        "vertical_position": 210, # 1=170(top), ... 4=60(default)
         "alignment": 2, # 2=Center
         "bold": 0,
         "italic": 0,
@@ -111,7 +111,11 @@ def main():
     parser.add_argument("--ai-backend", choices=["manual", "gemini", "g4f"], help="AI backend for viral analysis")
     parser.add_argument("--api-key", help="Gemini API Key (required if ai-backend is gemini)")
     
-    parser.add_argument("--workflow", choices=["1", "2"], default="1", help="Workflow choice: 1=Full, 2=Cut Only")
+    parser.add_argument("--chunk-size", help="Override Chunk Size")
+    parser.add_argument("--ai-model-name", help="Override AI Model Name")
+
+    parser.add_argument("--project-path", help="Path to existing project folder (overrides URL/Latest)")
+    parser.add_argument("--workflow", choices=["1", "2", "3"], default="1", help="Workflow choice: 1=Full, 2=Cut Only, 3=Subtitles Only")
     parser.add_argument("--face-model", choices=["insightface", "mediapipe"], default="insightface", help="Face detection model")
     parser.add_argument("--face-mode", choices=["auto", "1", "2"], default="auto", help="Face tracking mode: auto, 1, 2")
     parser.add_argument("--subtitle-config", help="Path to subtitle configuration JSON file")
@@ -119,23 +123,47 @@ def main():
     parser.add_argument("--skip-prompts", action="store_true", help="Skip interactive prompts and use defaults/existing files")
 
     args = parser.parse_args()
+    
+    # Workflow Logic
+    workflow_choice = args.workflow
+    
+    # If Subtitles Only, checking project path
+    if workflow_choice == "3" and not args.project_path and not args.url and not args.skip_prompts:
+        # Prompt for project path or use latest if not provided?
+        pass # Will handle in main flow
 
-    # Modo Apenas Queimar Legenda
+    # Modo Apenas Queimar Legenda (Legacy support, mapped to Workflow 3 internally if burn-only is set)
     # Verifica o argumento CLI ou uma variável local hardcoded (para compatibilidade)
     burn_only_mode = args.burn_only
 
     if burn_only_mode:
-        print(i18n("Burn only mode activated. Skipping to subtitle burning..."))
-        burn_subtitles.burn()
-        print(i18n("Subtitle burning completed."))
-        return
+        print(i18n("Burn only mode activated. Switching to Workflow 3..."))
+        workflow_choice = "3"
 
     # Obtenção de Inputs (CLI ou Interativo)
     url = args.url
+    project_path_arg = args.project_path
     input_video = None
 
-    # Se não temos URL via CLI, pedimos agora
-    if not url:
+    # Se project_path for fornecido, ignoramos URL
+    if project_path_arg:
+        if os.path.exists(project_path_arg):
+             print(i18n("Using provided project path: {}").format(project_path_arg))
+             # Tentar achar o input.mp4 pra manter compatibilidade de variaveis, embora Workflow 3 não precise de download
+             possible_input = os.path.join(project_path_arg, "input.mp4")
+             if os.path.exists(possible_input):
+                 input_video = possible_input
+             else:
+                 # Se não tiver input.mp4, tudo bem para workflow 3, mas definimos um dummy para não quebrar logica
+                 input_video = os.path.join(project_path_arg, "dummy_input.mp4")
+             
+             # Se for workflow 3, não precisamos de URL
+        else:
+             print(i18n("Error: Provided project path does not exist."))
+             sys.exit(1)
+
+    # Se não temos URL via CLI nem Project Path, pedimos agora
+    if not url and not project_path_arg:
         if args.skip_prompts:
              print(i18n("No URL provided and skipping prompts. Trying to load latest project..."))
              # Fallthrough to project loading logic
@@ -297,26 +325,28 @@ def main():
     # Advanced users use params.
     # We will assume CLI defaults are what we want if skip_prompts is on.
     
+    # Logic for detection intervals (Moved out of interactive block to support CLI/WebUI)
+    detection_intervals = None
+    if args.face_detect_interval:
+        try:
+            parts = args.face_detect_interval.split(',')
+            if len(parts) == 1:
+                val = float(parts[0])
+                detection_intervals = {'1': val, '2': val}
+            elif len(parts) >= 2:
+                val1 = float(parts[0])
+                val2 = float(parts[1])
+                detection_intervals = {'1': val1, '2': val2}
+        except ValueError:
+            pass
+
     if not args.burn_only and not args.skip_prompts:
         # Interactive Face Config
         print(i18n("\n--- Face Detection Settings ---"))
         print(i18n("Current Face Model: {} | Mode: {}").format(face_model, face_mode))
         
-        detection_intervals = None
-        if args.face_detect_interval:
-             try:
-                 parts = args.face_detect_interval.split(',')
-                 if len(parts) == 1:
-                     val = float(parts[0])
-                     detection_intervals = {'1': val, '2': val}
-                     print(i18n("Custom detection interval set: {}s for both modes").format(val))
-                 elif len(parts) >= 2:
-                     val1 = float(parts[0])
-                     val2 = float(parts[1])
-                     detection_intervals = {'1': val1, '2': val2}
-                     print(i18n("Custom detection interval set: {}s (1-face), {}s (2-face)").format(val1, val2))
-             except ValueError:
-                 print(i18n("Invalid format for face-detect-interval. Using defaults."))
+        if detection_intervals:
+             print(i18n("Custom detection intervals: {}").format(detection_intervals))
         else:
              print(i18n("Using dynamic intervals: 1s for 2-face, ~0.16s for 1-face."))
 
@@ -350,60 +380,82 @@ def main():
         print(f"Project Folder: {project_folder}")
         
         # 2. Transcribe
-        print(i18n("Transcribing with model {}...").format(args.model))
-        # Se skip config, args.model é default
-        srt_file, tsv_file = transcribe_video.transcribe(input_video, args.model, project_folder=project_folder)
-
+        if workflow_choice == "3":
+            print(i18n("Workflow 3: Skipping Transcribe."))
+            # We assume transcription exists (SRT/JSON) or we won't need it for 'adjust_subtitles' if it uses 'subs/*.json' which are created by 'cut_segments'
+            # Actually 'adjust_subtitles' reads from 'project_folder/subs'.
+            viral_segments = True # Skip checking
+        else:
+            print(i18n("Transcribing with model {}...").format(args.model))
+            # Se skip config, args.model é default
+            srt_file, tsv_file = transcribe_video.transcribe(input_video, args.model, project_folder=project_folder)
+ 
         # 3. Create Viral Segments
-        # Se não carregamos 'viral_segments' lá em cima (ou se era download novo), checamos agora ou criamos
-        if not viral_segments:
-             # Checagem tardia para downloads novos que por acaso ja tenham json (Ex: URL repetida)
-            viral_segments_file_late = os.path.join(project_folder, "viral_segments.txt")
-            if os.path.exists(viral_segments_file_late):
-                 # ... Lógica de pergunta tardia se necessário, ou auto-uso?
-                 # Como o usuário já respondeu config, talvez ele queira refazer?
-                 # Para simplificar, se não carregou antes, assume que quer criar (ou perguntamos de novo).
-                 # Mas para não ficar chato, vamos perguntar só se não foi perguntado antes.
-                 pass 
-            
-            print(i18n("Creating viral segments using {}...").format(ai_backend.upper()))
-            viral_segments = create_viral_segments.create(
-                num_segments, 
-                viral_mode, 
-                themes, 
-                args.min_duration, 
-                args.max_duration,
-                ai_mode=ai_backend,
-                api_key=api_key,
-                project_folder=project_folder
-            )
-            
-            if not viral_segments or not viral_segments.get("segments"):
-                 print("Aviso: Nenhum segmento viral foi gerado. Verifique a resposta da IA.")
-            
-            save_json.save_viral_segments(viral_segments, project_folder=project_folder) 
+        if workflow_choice != "3":
+            # Se não carregamos 'viral_segments' lá em cima (ou se era download novo), checamos agora ou criamos
+            if not viral_segments:
+                # Checagem tardia para downloads novos que por acaso ja tenham json (Ex: URL repetida)
+                viral_segments_file_late = os.path.join(project_folder, "viral_segments.txt")
+                if os.path.exists(viral_segments_file_late):
+                    print(i18n("Found existing viral segments file at {}").format(viral_segments_file_late))
+                    if args.skip_prompts:
+                        print(i18n("Skipping prompts enabled. Loading existing segments."))
+                        try:
+                            with open(viral_segments_file_late, 'r', encoding='utf-8') as f:
+                                viral_segments = json.load(f)
+                        except Exception as e:
+                            print(i18n("Error loading existing JSON: {}. Proceeding to create new segments.").format(e))
+                    else:
+                        # Ask user if they want to use it
+                        pass # (Logic for interactive mode can be added here if needed, but keeping it simple as per request)
+                    
+                if not viral_segments:
+                    print(i18n("Creating viral segments using {}...").format(ai_backend.upper()))
+                    viral_segments = create_viral_segments.create(
+                        num_segments, 
+                        viral_mode, 
+                        themes, 
+                        args.min_duration, 
+                        args.max_duration,
+                        ai_mode=ai_backend,
+                        api_key=api_key,
+                        project_folder=project_folder,
+                        chunk_size_arg=args.chunk_size,
+                        model_name_arg=args.ai_model_name
+                    )
+                
+                if not viral_segments or not viral_segments.get("segments"):
+                    print("Aviso: Nenhum segmento viral foi gerado. Verifique a resposta da IA.")
+                
+                save_json.save_viral_segments(viral_segments, project_folder=project_folder) 
 
         # 4. Cut Segments
-        cuts_folder = os.path.join(project_folder, "cuts")
-        skip_cutting = False
-        
-        if os.path.exists(cuts_folder) and os.listdir(cuts_folder):
-             print(i18n("\nExisting cuts found in: {}").format(cuts_folder))
-             if args.skip_prompts:
-                 cut_again_resp = 'no'
-             else:
-                 cut_again_resp = input(i18n("Cuts already exist. Cut again? (yes/no) [default: no]: ")).strip().lower()
-             
-             # Default is no (skip) if they just press enter or say no
-             if cut_again_resp not in ['y', 'yes']:
-                 skip_cutting = True
-        
-        if skip_cutting:
-             print(i18n("Skipping Video Rendering (using existing cuts), but updating Subtitle JSONs..."))
+        # Se workflow for 3, pulamos corte
+        if workflow_choice == "3":
+            print(i18n("Workflow 3 (Subtitles Only): Skipping Cut and Edit."))
+            # Deduzir cuts folder apenas para log
+            cuts_folder = os.path.join(project_folder, "cuts")
         else:
-             print(i18n("Cutting segments..."))
+            cuts_folder = os.path.join(project_folder, "cuts")
+            skip_cutting = False
+            
+            if os.path.exists(cuts_folder) and os.listdir(cuts_folder):
+                print(i18n("\nExisting cuts found in: {}").format(cuts_folder))
+                if args.skip_prompts:
+                    cut_again_resp = 'no'
+                else:
+                    cut_again_resp = input(i18n("Cuts already exist. Cut again? (yes/no) [default: no]: ")).strip().lower()
+                
+                # Default is no (skip) if they just press enter or say no
+                if cut_again_resp not in ['y', 'yes']:
+                    skip_cutting = True
+            
+            if skip_cutting:
+                print(i18n("Skipping Video Rendering (using existing cuts), but updating Subtitle JSONs..."))
+            else:
+                print(i18n("Cutting segments..."))
 
-        cut_segments.cut(viral_segments, project_folder=project_folder, skip_video=skip_cutting)
+            cut_segments.cut(viral_segments, project_folder=project_folder, skip_video=skip_cutting)
         
         # 5. Workflow Check
         if workflow_choice == "2":
@@ -412,8 +464,11 @@ def main():
             sys.exit(0)
 
         # 5. Edit Video (Face Crop)
-        print(i18n("Editing video with {} (Mode: {})...").format(face_model, face_mode))
-        edit_video.edit(project_folder=project_folder, face_model=face_model, face_mode=face_mode, detection_period=detection_intervals)
+        if workflow_choice != "3":
+            print(i18n("Editing video with {} (Mode: {})...").format(face_model, face_mode))
+            edit_video.edit(project_folder=project_folder, face_model=face_model, face_mode=face_mode, detection_period=detection_intervals)
+        else:
+            print(i18n("Workflow 3: Skipping Face Crop."))
 
         # 6. Subtitles
         burn_subtitles_option = True 
