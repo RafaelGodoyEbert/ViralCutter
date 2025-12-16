@@ -14,6 +14,13 @@ i18n = I18nAuto()
 
 VIRALS_DIR = os.path.join(BASE_DIR, "VIRALS")
 
+# URL Mode: "fastapi" (default) or "gradio"
+URL_MODE = "fastapi"
+
+def set_url_mode(mode):
+    global URL_MODE
+    URL_MODE = mode
+
 def get_existing_projects():
     if not os.path.exists(VIRALS_DIR):
         return []
@@ -112,34 +119,56 @@ def generate_project_gallery(project_path_name, is_full_path=False):
             video_tag = ""
             download_link = ""
             if video_path:
-                # Use Relative Path through /virals mount
                 try:
-                    # Calculate relative path from VIRALS_DIR
-                    # video_path needs to be under VIRALS_DIR for this to work
                     abs_video = os.path.abspath(video_path)
-                    abs_virals = os.path.abspath(VIRALS_DIR)
                     
-                    if abs_video.startswith(abs_virals):
-                        rel_path = os.path.relpath(abs_video, abs_virals)
-                        # Replace backslashes for URL
-                        url_path = rel_path.replace("\\", "/")
-                        url_path = urllib.parse.quote(url_path)
-                        
-                        # Add timestamp to force cache refresh
-                        import time
-                        timestamp = int(time.time())
-                        video_src = f"/virals/{url_path}?t={timestamp}"
-                        
-                        video_tag = f"""
+                    if URL_MODE == "gradio":
+                         # Gradio Launch Mode: Use /file/ + absolute path
+                         # Use raw string for Windows paths ? No, f-string with quote is fine, browser handles it.
+                         # Just ensure we have leading forward slash for route
+                         # Gradio expects /file/<abs_path>
+                         video_src = f"/file/{abs_video}"
+                         
+                         # Add timestamp for cache busting
+                         import time
+                         timestamp = int(time.time())
+                         video_src = f"{video_src}?t={timestamp}"
+
+                         video_tag = f"""
                         <video controls preload="metadata" playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;">
                             <source src="{video_src}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
                         """
-                        
-                        download_link = f'<a href="{video_src}" download="{os.path.basename(video_path)}" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="Download" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>'
+                         download_link = f'<a href="{video_src}" download="{os.path.basename(video_path)}" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="Download" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>'
+
                     else:
-                        video_tag = f'<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #222; color: #666;"><span>⚠️</span><br>{i18n("External Video")}</div>'
+                        # Use Relative Path through /virals mount
+                        # Calculate relative path from VIRALS_DIR
+                        # video_path needs to be under VIRALS_DIR for this to work
+                        abs_virals = os.path.abspath(VIRALS_DIR)
+                        
+                        if abs_video.startswith(abs_virals):
+                            rel_path = os.path.relpath(abs_video, abs_virals)
+                            # Replace backslashes for URL
+                            url_path = rel_path.replace("\\", "/")
+                            url_path = urllib.parse.quote(url_path)
+                            
+                            # Add timestamp to force cache refresh
+                            import time
+                            timestamp = int(time.time())
+                            video_src = f"/virals/{url_path}?t={timestamp}"
+                            
+                            video_tag = f"""
+                            <video controls preload="metadata" playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;">
+                                <source src="{video_src}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            """
+                            
+                            download_link = f'<a href="{video_src}" download="{os.path.basename(video_path)}" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="Download" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>'
+                        else:
+                            video_tag = f'<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #222; color: #666;"><span>⚠️</span><br>{i18n("External Video")}</div>'
                 except Exception as e:
                     video_tag = f'<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #222; color: #666;"><span>⚠️</span><br>{i18n("Error: {}").format(str(e))}</div>'
 

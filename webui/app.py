@@ -201,7 +201,7 @@ footer {visibility: hidden}
 
 import header
 
-with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_hue="blue", neutral_hue="slate"), css=css) as app:
+with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_hue="blue", neutral_hue="slate"), css=css) as demo:
     gr.Markdown(header.badges)
     gr.Markdown(header.description)
     with gr.Tabs():
@@ -322,8 +322,8 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                 )
                 
                 # Initial load
-                app.load(subs.generate_preview_html, inputs=manual_inputs, outputs=preview_html)
-                app.load(subs.apply_preset, inputs=[preset_input], outputs=manual_inputs) # Apply default preset on load
+                demo.load(subs.generate_preview_html, inputs=manual_inputs, outputs=preview_html)
+                demo.load(subs.apply_preset, inputs=[preset_input], outputs=manual_inputs) # Apply default preset on load
 
              with gr.Row():
                  start_btn = gr.Button(i18n("Start Processing"), variant="primary")
@@ -372,26 +372,38 @@ if __name__ == "__main__":
     import webbrowser
     import threading
     import time
+    import argparse
 
-    def open_browser():
-        time.sleep(1.5) # Slight delay to ensure server finds port
-        webbrowser.open("http://localhost:7860")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--colab", action="store_true", help="Run in Google Colab mode")
+    args = parser.parse_args()
 
-    # Create FastAPI app and mount both StaticFiles and Gradio
-    fast_app = FastAPI()
-    fast_app.mount("/virals", StaticFiles(directory=VIRALS_DIR), name="virals")
-    
-    # Mount Gradio app
-    # Note: 'app' here refers to the gr.Blocks object defined above
-    app = gr.mount_gradio_app(fast_app, app, path="/")
-    
-    print("Starting ViralCutter WebUI...")
-    threading.Thread(target=open_browser, daemon=True).start()
-    
-    # Run server
-    try:
-        uvicorn.run(app, host="0.0.0.0", port=7860)
-    except Exception as e:
-        print(f"Error starting server: {e}")
-        input("Press Enter to close...")
+    if args.colab:
+        print("Running in Colab mode. Generating public link...")
+        library.set_url_mode("gradio")
+        # In Colab/Gradio mode, we launch the blocks directly with share=True
+        # allowed_paths is needed to serve files via /file/ mechanism
+        demo.queue().launch(share=True, allowed_paths=[VIRALS_DIR, WORKING_DIR])
+    else:
+        def open_browser():
+            time.sleep(1.5) # Slight delay to ensure server finds port
+            webbrowser.open("http://localhost:7860")
+
+        # Create FastAPI app and mount both StaticFiles and Gradio
+        fast_app = FastAPI()
+        fast_app.mount("/virals", StaticFiles(directory=VIRALS_DIR), name="virals")
+        
+        # Mount Gradio app
+        # Note: 'demo' here refers to the gr.Blocks object defined above
+        app = gr.mount_gradio_app(fast_app, demo, path="/")
+        
+        print("Starting ViralCutter WebUI...")
+        threading.Thread(target=open_browser, daemon=True).start()
+        
+        # Run server
+        try:
+            uvicorn.run(app, host="0.0.0.0", port=7860)
+        except Exception as e:
+            print(f"Error starting server: {e}")
+            input("Press Enter to close...")
 
