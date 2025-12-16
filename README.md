@@ -19,6 +19,13 @@ Confira as melhorias mais recentes:
 
 *(Veja o [changelog.md](changelog.md) para detalhes completos)*
 
+## **Interface**
+![WebUi Home](https://github.com/user-attachments/assets/d23fe5dc-90a6-4ea8-947c-3ecbd8e54402)
+*Tela Principal: Ajustes de IA, legendas e visualização de logs*
+
+![WebUI Settings](https://github.com/user-attachments/assets/e588e6b0-84cf-422b-8ddd-6c78ec17e345)
+*Configurações: Galeria estilo OpusClip e controles intuitivos*
+
 ## **Funcionalidades**
 
 - **Download de Vídeos**: Baixa vídeos do YouTube através de uma URL fornecida.
