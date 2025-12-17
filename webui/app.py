@@ -15,6 +15,7 @@ import uvicorn
 import re
 import library # Module for Library Logic
 import subtitle_handler as subs # Module for Subtitles
+import subtitle_editor as editor # Module for Editor Logic
 
 # Path to the main script
 MAIN_SCRIPT_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main_improved.py")
@@ -347,10 +348,97 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                  underline_input, strikeout_input, border_style_input
              ], outputs=[logs_output, start_btn, stop_btn, results_html])
 
+
+        with gr.Tab(i18n("Subtitle Editor")):
+            gr.Markdown(f"### {i18n('Edit Subtitles (Smart Mode)')}")
+            
+            with gr.Row():
+                editor_project_dropdown = gr.Dropdown(choices=library.get_existing_projects(), label=i18n("Select Project"), value=None)
+                editor_refresh_btn = gr.Button(i18n("Refresh"), size="sm")
+            
+            with gr.Row():
+                editor_file_dropdown = gr.Dropdown(choices=[], label=i18n("Select Subtitle File"), interactive=True)
+                editor_load_btn = gr.Button(i18n("Load Subtitles"), variant="secondary")
+
+            # Hidden state to store full path of currently loaded JSON
+            current_json_path = gr.State()
+
+            # The Dataframe Editor
+            # Headers: Start, End, Text
+            subtitle_dataframe = gr.Dataframe(
+                headers=["Start", "End", "Text"],
+                datatype=["str", "str", "str"],
+                col_count=(3, "fixed"),
+                interactive=True,
+                label=i18n("Subtitle Segments"),
+                wrap=True
+            )
+
+            with gr.Row():
+                editor_save_btn = gr.Button(i18n("💾 Save Changes"), variant="primary")
+                editor_render_single_btn = gr.Button(i18n("⚡ Render This Segment (Very-Fast)"), variant="secondary")
+                editor_render_all_btn = gr.Button(i18n("🎬 Render All (Fast)"), variant="stop")
+            
+            editor_status = gr.Textbox(label=i18n("Status"), interactive=False)
+
+            # --- Callbacks for Editor ---
+            editor_refresh_btn.click(library.refresh_projects, outputs=editor_project_dropdown)
+
+            def update_file_list(proj_name):
+                if not proj_name: return gr.update(choices=[])
+                proj_path = os.path.join(VIRALS_DIR, proj_name)
+                files = editor.list_editable_files(proj_path)
+                return gr.update(choices=files, value=files[0] if files else None)
+
+            editor_project_dropdown.change(update_file_list, inputs=editor_project_dropdown, outputs=editor_file_dropdown)
+
+            def load_subs(proj_name, file_name):
+                if not proj_name or not file_name:
+                    return [], None, i18n("Please select project and file.")
+                
+                full_path = os.path.join(VIRALS_DIR, proj_name, 'subs', file_name)
+                data = editor.load_transcription_for_editor(full_path)
+                return data, full_path, i18n("Loaded {} segments.").format(len(data))
+
+            editor_load_btn.click(load_subs, inputs=[editor_project_dropdown, editor_file_dropdown], outputs=[subtitle_dataframe, current_json_path, editor_status])
+
+            def save_subs(json_path, df):
+                if not json_path: return i18n("No file loaded.")
+                data_list = df.values.tolist() if hasattr(df, 'values') else df
+                msg = editor.save_editor_changes(json_path, data_list)
+                return msg
+
+            editor_save_btn.click(save_subs, inputs=[current_json_path, subtitle_dataframe], outputs=editor_status)
+
+            def render_single(json_path):
+                if not json_path: return i18n("No file loaded.")
+                # We expect user to SAVE first, but we could auto-save.
+                # For now assume saved.
+                msg = editor.render_specific_video(json_path)
+                return msg
+
+            editor_render_single_btn.click(render_single, inputs=[current_json_path], outputs=editor_status)
+
+            def render_all(proj_name):
+                if not proj_name: return i18n("No project selected.")
+                
+                proj_path = os.path.join(VIRALS_DIR, proj_name)
+                # Workflow 3 triggers subtitles only for the whole project
+                cmd = [sys.executable, MAIN_SCRIPT_PATH, "--project-path", proj_path, "--workflow", "3", "--skip-prompts"]
+                
+                try:
+                    subprocess.Popen(cmd, cwd=WORKING_DIR)
+                    return i18n("Render All started in background... Check terminal/logs.")
+                except Exception as e:
+                    return f"Error starting render: {e}"
+
+            editor_render_all_btn.click(render_all, inputs=[editor_project_dropdown], outputs=editor_status)
+
+
         with gr.Tab(i18n("Library")):
             gr.Markdown(f"### {i18n('Existing Projects')}")
             with gr.Row():
-                project_dropdown = gr.Dropdown(choices=library.get_existing_projects(), label=i18n("Select Project"))
+                project_dropdown = gr.Dropdown(choices=library.get_existing_projects(), label=i18n("Select Project"), value=None)
                 refresh_btn = gr.Button(i18n("Refresh List"))
             project_gallery_html = gr.HTML()
             refresh_btn.click(library.refresh_projects, outputs=project_dropdown)

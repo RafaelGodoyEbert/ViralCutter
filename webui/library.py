@@ -34,7 +34,7 @@ def get_existing_projects():
 
 def refresh_projects():
     projs = get_existing_projects()
-    return gr.update(choices=projs, value=projs[0] if projs else None)
+    return gr.update(choices=projs, value=None)
 
 def generate_project_gallery(project_path_name, is_full_path=False):
     """

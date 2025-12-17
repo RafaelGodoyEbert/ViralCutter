@@ -1,5 +1,13 @@
 # Changelog
 
+## Editor de Legenda JSON
+
+### Funcionalidades
+- **Editor de Legendas**: Adicionado um editor de legendas simples, dentro das limitações do Gradio, para corrigir erros de ortografia ocorridos durante o uso do WhisperX.
+
+### Correções
+- **Geral**: Alguns Fix Colab e melhorias na geração de viral segments.
+
 ## Gradio WebUI & UV Installation
 
 ### Nova Interface Web (Gradio)
