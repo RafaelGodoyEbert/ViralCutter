@@ -20,11 +20,11 @@ Confira as melhorias mais recentes:
 *(Veja o [changelog.md](changelog.md) para detalhes completos)*
 
 ## **Interface**
-![WebUi Home](https://github.com/user-attachments/assets/d23fe5dc-90a6-4ea8-947c-3ecbd8e54402)
+![WebUi Home](https://github.com/user-attachments/assets/923f260d-222b-40cc-9ab6-7114d6cefd1c)
 *Tela Principal: Ajustes de IA, legendas e visualização de logs*
 
-![WebUI Settings](https://github.com/user-attachments/assets/e588e6b0-84cf-422b-8ddd-6c78ec17e345)
-*Configurações: Galeria estilo OpusClip e controles intuitivos*
+![WebUI Library](https://github.com/user-attachments/assets/3d9fd063-7e81-4e14-bba6-c66618a1635f)
+*Biblioteca: Galeria estilo OpusClip e controles intuitivos*
 
 ## **Funcionalidades**
 
