@@ -20,10 +20,10 @@ Check out the latest improvements:
 *(See [changelog.md](changelog.md) for full details)*
 
 ## **Interface**
-![WebUi Home](https://github.com/user-attachments/assets/d23fe5dc-90a6-4ea8-947c-3ecbd8e54402)
+![WebUi Home](https://github.com/user-attachments/assets/923f260d-222b-40cc-9ab6-7114d6cefd1c)
 *Main Screen: OpusClip-style gallery and intuitive controls*
 
-![WebUI Settings](https://github.com/user-attachments/assets/e588e6b0-84cf-422b-8ddd-6c78ec17e345)
+![WebUI Library](https://github.com/user-attachments/assets/3d9fd063-7e81-4e14-bba6-c66618a1635f)
 *Settings: AI adjustment, captions, and log viewer*
 
 ## **Features**
@@ -45,7 +45,7 @@ HF [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%2
 -->
 
 - Open the link and follow the steps in order(Only Portuguese, sorry): [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1UZKzeqjIeEyvq9nPx7s_4mU6xlkZQn_R?usp=sharing#scrollTo=pa36OeArowme) <br>
-
+- I couldn't get the video to download/play correctly on Gradio in Google Colab, but it's functional.
 
 ## **Limitations**
 
