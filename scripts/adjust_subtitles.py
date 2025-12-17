@@ -49,8 +49,15 @@ def generate_ass_from_file(input_path, output_path, project_folder,
         current_vertical_position = 0 
 
     # 3. Load JSON
-    with open(input_path, "r", encoding="utf-8") as file:
-        json_data = json.load(file)
+    try:
+        with open(input_path, "r", encoding="utf-8") as file:
+            json_data = json.load(file)
+        
+        segments_count = len(json_data.get('segments', []))
+        print(f"[DEBUG] Loaded {input_path}: Found {segments_count} segments.")
+    except Exception as e:
+        print(f"[ERROR] Loading JSON {input_path}: {e}")
+        return
 
     # 4. Generate Content
     header_ass = f"""[Script Info]
@@ -68,8 +75,10 @@ def generate_ass_from_file(input_path, output_path, project_folder,
     Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     """
     
+    total_lines_written = 0
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(header_ass)
+
 
         last_end_time = 0.0
 
@@ -133,7 +142,9 @@ def generate_ass_from_file(input_path, output_path, project_folder,
                                 line += f"{{\\fs{base_size}\\c{base_color}}}{word} "
                         line = line.strip()
 
-                    elif mode == "sem_higlight": 
+                        line = line.strip()
+
+                    elif mode == "no_highlight" or mode == "sem_higlight": 
                         line = " ".join(word_data['word'] for word_data in block).strip()
 
                     elif mode == "palavra_por_palavra": 
@@ -171,6 +182,12 @@ def generate_ass_from_file(input_path, output_path, project_folder,
                         final_line = line
 
                     f.write(f"Dialogue: 0,{start_time_ass},{end_time_ass},Default,,0,0,0,,{final_line}\n")
+                    total_lines_written += 1
+    
+    if total_lines_written == 0:
+        print(f"[WARN] No dialogue lines written for {input_path}")
+    else:
+        print(f"[DEBUG] Wrote {total_lines_written} lines to {output_path}")
 
 
 def adjust(base_color, base_size, highlight_size, highlight_color, words_per_block, gap_limit, mode, vertical_position, alignment, font, outline_color, shadow_color, bold, italic, underline, strikeout, border_style, outline_thickness, shadow_size, uppercase=False, project_folder="tmp", **kwargs):

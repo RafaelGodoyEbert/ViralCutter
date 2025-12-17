@@ -157,7 +157,9 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
             cmd.extend(["--subtitle-config", subtitle_config_path])
         except Exception: pass 
     
-    current_process = subprocess.Popen(cmd, cwd=WORKING_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    current_process = subprocess.Popen(cmd, cwd=WORKING_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True, env=env)
     logs = ""
     project_folder_path = None
     if input_source == "Existing Project" and project_name:
@@ -170,7 +172,9 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
             parts = line.split("Project Folder:")
             if len(parts) > 1: project_folder_path = parts[1].strip()
         yield logs, gr.update(visible=True, interactive=False), gr.update(visible=True), None
-    current_process.wait()
+    
+    if current_process:
+        current_process.wait()
     current_process = None
     
     # Wait to ensure filesystem flush
@@ -352,11 +356,11 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
         with gr.Tab(i18n("Subtitle Editor")):
             gr.Markdown(f"### {i18n('Edit Subtitles (Smart Mode)')}")
             
-            with gr.Row():
+            with gr.Group():
                 editor_project_dropdown = gr.Dropdown(choices=library.get_existing_projects(), label=i18n("Select Project"), value=None)
                 editor_refresh_btn = gr.Button(i18n("Refresh"), size="sm")
             
-            with gr.Row():
+            with gr.Group():
                 editor_file_dropdown = gr.Dropdown(choices=[], label=i18n("Select Subtitle File"), interactive=True)
                 editor_load_btn = gr.Button(i18n("Load Subtitles"), variant="secondary")
 
@@ -410,29 +414,105 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
 
             editor_save_btn.click(save_subs, inputs=[current_json_path, subtitle_dataframe], outputs=editor_status)
 
-            def render_single(json_path):
+            def render_single(json_path, use_custom, font_name, font_size, font_color, highlight_color, 
+                              outline_color, outline_thickness, shadow_color, shadow_size, 
+                              is_bold, is_italic, is_uppercase, 
+                              h_size, w_block, gap, mode, under, strike, border_s, 
+                              vertical_pos, alignment):
+                
                 if not json_path: return i18n("No file loaded.")
+                
+                subtitle_config_path = os.path.join(WORKING_DIR, "temp_subtitle_config.json")
+                
+                # Save config if custom subs enabled
+                if use_custom:
+                    subtitle_config = {
+                        "font": font_name, "base_size": int(font_size), 
+                        "base_color": convert_color_to_ass(font_color), 
+                        "highlight_color": convert_color_to_ass(highlight_color),
+                        "outline_color": convert_color_to_ass(outline_color), 
+                        "outline_thickness": outline_thickness, 
+                        "shadow_color": convert_color_to_ass(shadow_color),
+                        "shadow_size": shadow_size, "vertical_position": vertical_pos, 
+                        "alignment": alignment, "bold": 1 if is_bold else 0, 
+                        "italic": 1 if is_italic else 0, 
+                        "underline": 1 if under else 0, "strikeout": 1 if strike else 0, 
+                        "border_style": border_s, "words_per_block": int(w_block), 
+                        "gap_limit": gap, "mode": mode, "highlight_size": int(h_size),
+                        "uppercase": 1 if is_uppercase else 0
+                    }
+                    try:
+                        with open(subtitle_config_path, "w", encoding="utf-8") as f:
+                            json.dump(subtitle_config, f, indent=4)
+                    except Exception: pass
+                else:
+                    # Remove temp config if it exists to ensure defaults are used
+                    try:
+                        if os.path.exists(subtitle_config_path):
+                            os.remove(subtitle_config_path)
+                    except Exception: pass
+                
                 # We expect user to SAVE first, but we could auto-save.
                 # For now assume saved.
                 msg = editor.render_specific_video(json_path)
                 return msg
 
-            editor_render_single_btn.click(render_single, inputs=[current_json_path], outputs=editor_status)
+            editor_render_single_btn.click(
+                render_single, 
+                inputs=[current_json_path, use_custom_subs] + manual_inputs, 
+                outputs=editor_status
+            )
 
-            def render_all(proj_name):
+            def render_all(proj_name, use_custom, font_name, font_size, font_color, highlight_color, 
+                           outline_color, outline_thickness, shadow_color, shadow_size, 
+                           is_bold, is_italic, is_uppercase, 
+                           h_size, w_block, gap, mode, under, strike, border_s, 
+                           vertical_pos, alignment):
                 if not proj_name: return i18n("No project selected.")
                 
+                # Save config
+                if use_custom:
+                    subtitle_config = {
+                        "font": font_name, "base_size": int(font_size), 
+                        "base_color": convert_color_to_ass(font_color), 
+                        "highlight_color": convert_color_to_ass(highlight_color),
+                        "outline_color": convert_color_to_ass(outline_color), 
+                        "outline_thickness": outline_thickness, 
+                        "shadow_color": convert_color_to_ass(shadow_color),
+                        "shadow_size": shadow_size, "vertical_position": vertical_pos, 
+                        "alignment": alignment, "bold": 1 if is_bold else 0, 
+                        "italic": 1 if is_italic else 0, 
+                        "underline": 1 if under else 0, "strikeout": 1 if strike else 0, 
+                        "border_style": border_s, "words_per_block": int(w_block), 
+                        "gap_limit": gap, "mode": mode, "highlight_size": int(h_size),
+                        "uppercase": 1 if is_uppercase else 0
+                    }
+                    subtitle_config_path = os.path.join(WORKING_DIR, "temp_subtitle_config.json")
+                    try:
+                        with open(subtitle_config_path, "w", encoding="utf-8") as f:
+                            json.dump(subtitle_config, f, indent=4)
+                    except Exception: pass
+
                 proj_path = os.path.join(VIRALS_DIR, proj_name)
-                # Workflow 3 triggers subtitles only for the whole project
+                
+                # IMPORTANT: Pass the config file path to the command
+                subtitle_config_path = os.path.join(WORKING_DIR, "temp_subtitle_config.json")
                 cmd = [sys.executable, MAIN_SCRIPT_PATH, "--project-path", proj_path, "--workflow", "3", "--skip-prompts"]
                 
+                if use_custom and os.path.exists(subtitle_config_path):
+                     cmd.extend(["--subtitle-config", subtitle_config_path])
+
                 try:
                     subprocess.Popen(cmd, cwd=WORKING_DIR)
                     return i18n("Render All started in background... Check terminal/logs.")
                 except Exception as e:
                     return f"Error starting render: {e}"
 
-            editor_render_all_btn.click(render_all, inputs=[editor_project_dropdown], outputs=editor_status)
+            editor_render_all_btn.click(
+                render_all, 
+                inputs=[editor_project_dropdown, use_custom_subs] + manual_inputs, 
+                outputs=editor_status
+            )
 
 
         with gr.Tab(i18n("Library")):

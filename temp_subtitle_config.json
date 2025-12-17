@@ -1,0 +1,22 @@
+{
+    "font": "Montserrat-ExtraBold",
+    "base_size": 30,
+    "base_color": "&H00FFFFFF&",
+    "highlight_color": "&H0000FF00&",
+    "outline_color": "&H00000000&",
+    "outline_thickness": 3,
+    "shadow_color": "&H00000000&",
+    "shadow_size": 0,
+    "vertical_position": 200,
+    "alignment": 2,
+    "bold": 1,
+    "italic": 0,
+    "underline": 0,
+    "strikeout": 0,
+    "border_style": 1,
+    "words_per_block": 2,
+    "gap_limit": 0.5,
+    "mode": "highlight",
+    "highlight_size": 35,
+    "uppercase": 1
+}

@@ -1,6 +1,8 @@
 import json
 import os
 import re
+import sys
+import time
 
 # Tenta importar bibliotecas de IA opcionalmente
 try:
@@ -26,6 +28,12 @@ def clean_json_response(response_text):
         response_text = match.group(1)
     elif "```" in response_text:
          response_text = response_text.replace("```", "")
+    else:
+        # Fallback: Try to find the first { and last }
+        start_idx = response_text.find("{")
+        end_idx = response_text.rfind("}")
+        if start_idx != -1 and end_idx != -1:
+            response_text = response_text[start_idx : end_idx + 1]
     
     return json.loads(response_text.strip())
 
@@ -37,12 +45,32 @@ def call_gemini(prompt, api_key, model_name='gemini-2.5-flash-lite-preview-09-20
     # Usando modelo definido na config ou o padrão
     model = genai.GenerativeModel(model_name) 
     
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        print(f"Erro na API do Gemini: {e}")
-        return "{}"
+    max_retries = 5
+    base_wait = 30
+
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            error_str = str(e)
+            if "429" in error_str or "Quota exceeded" in error_str:
+                wait_time = base_wait * (attempt + 1) # Backoff default
+                
+                # Try to find specific wait time in error message
+                match = re.search(r"retry in (\d+(\.\d+)?)s", error_str)
+                if match:
+                    wait_time = float(match.group(1)) + 5.0 # Add 5s buffer
+                
+                print(f"[429] Quota Exceeded. Waiting {wait_time:.2f}s before retry {attempt+1}/{max_retries}...", flush=True)
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"Erro na API do Gemini: {e}")
+                return "{}"
+    
+    print("Falha após max retries no Gemini.")
+    return "{}"
 
 def call_g4f(prompt, model_name="gpt-4o-mini"):
     if not HAS_G4F:
@@ -155,10 +183,10 @@ OUTPUT FORMAT:
             { "segments" :
                 [
                     {
-                        "title": "Suggested Viral Title",
+                        "title": "Suggested Viral Title on same language of tsv",
                         "start_time": number,
                         "end_time": number,
-                        "description": "Description of the text",
+                        "hook": "On-screen hook text that grabs attention",
                         "duration": 0,
                         "score": 0  # Probability of going viral (0-100)
                     }
@@ -167,18 +195,46 @@ OUTPUT FORMAT:
         '''
 
     # Split content into chunks
+    # Split content into chunks with OVERLAP
     chunk_size = int(current_chunk_size)
+    
+    # Define overlap size (e.g. 10% of chunk size or min 1000 chars)
+    overlap_size = max(1000, int(chunk_size * 0.1))
+    
     chunks = []
     start = 0
+    content_len = len(content)
 
-    while start < len(content):
-        end = min(start + chunk_size, len(content))
-        if end < len(content):
-            end = content.rfind('\n', start, end)
-            if end == -1:
-                end = start + chunk_size
-        chunks.append(content[start:end])
-        start = end
+    print(f"[DEBUG] Chunking content (Size: {content_len}) with Chunk Size: {chunk_size} and Overlap: {overlap_size}")
+
+    while start < content_len:
+        end = min(start + chunk_size, content_len)
+        
+        # Align End to newline to avoid cutting sentences
+        if end < content_len:
+            last_newline = content.rfind('\n', start, end)
+            if last_newline != -1 and last_newline > start:
+                end = last_newline
+        
+        chunk_text = content[start:end]
+        if chunk_text.strip(): # Avoid empty chunks
+            chunks.append(chunk_text)
+        
+        if end >= content_len:
+            break
+            
+        # Prepare start for next chunk (Backtrack by overlap)
+        next_start = max(start + 1, end - overlap_size)
+        
+        # Align next_start to a newline for clean start
+        # Find newline strictly before next_start? Or nearest?
+        # Safe bet: Find last newline before 'next_start' but after 'start'
+        safe_newline = content.rfind('\n', start, next_start)
+        if safe_newline != -1:
+            start = safe_newline + 1
+        else:
+            # If no newline found (huge block of text), just use next_start
+            start = next_start
 
     if viral_mode:
         virality_instruction = f"""analyze the segment for potential virality and identify {quantidade_de_virals} most viral segments from the transcript"""
@@ -216,6 +272,26 @@ OUTPUT FORMAT:
             prompt = prompt.replace("{amount}", str(quantidade_de_virals))
 
         output_texts.append(prompt)
+
+    # --- Save Full Prompt for Reference ---
+    try:
+        full_prompt_path = os.path.join(project_folder, "prompt_full.txt")
+        # Prepare full prompt using replace to be safe
+        full_prompt = system_prompt_template
+        full_prompt = full_prompt.replace("{context_instruction}", "Full Video Transcript Analysis")
+        full_prompt = full_prompt.replace("{virality_instruction}", virality_instruction)
+        full_prompt = full_prompt.replace("{min_duration}", str(tempo_minimo))
+        full_prompt = full_prompt.replace("{max_duration}", str(tempo_maximo))
+        full_prompt = full_prompt.replace("{transcript_chunk}", content) # Full Content
+        full_prompt = full_prompt.replace("{json_template}", json_template)
+        full_prompt = full_prompt.replace("{amount}", str(quantidade_de_virals))
+        
+        with open(full_prompt_path, "w", encoding="utf-8") as f:
+            f.write(full_prompt)
+        # print(f"[INFO] Full reference prompt saved to: {full_prompt_path}")
+    except Exception as e:
+        print(f"[WARN] Could not save prompt_full.txt: {e}")
+    # -------------------------------------
 
     all_segments = []
 
@@ -292,6 +368,48 @@ OUTPUT FORMAT:
         all_segments.sort(key=lambda x: int(x.get('score', 0)), reverse=True)
     except:
         pass # If scores are not valid integers, skip sorting or rely on order
+
+    # --- DEDUPLICATION LOGIC ---
+    # Merge overlapping segments. Prioritize higher score.
+    unique_segments = []
+    
+    def check_overlap(seg1, seg2):
+        # Convert times to float just in case
+        try:
+            s1, e1 = float(seg1.get('start_time', 0)), float(seg1.get('end_time', 0))
+            s2, e2 = float(seg2.get('start_time', 0)), float(seg2.get('end_time', 0))
+            
+            # Calculate intersection
+            start_max = max(s1, s2)
+            end_min = min(e1, e2)
+            
+            if end_min > start_max:
+                intersection = end_min - start_max
+                duration1 = e1 - s1
+                duration2 = e2 - s2
+                # If intersection covers > 30% of the smaller segment, consider it a duplicate
+                min_dur = min(duration1, duration2)
+                if min_dur > 0 and (intersection / min_dur) > 0.3:
+                    return True
+            return False
+        except:
+            return False
+
+    print(f"[DEBUG] Starting Deduplication on {len(all_segments)} raw segments...")
+    
+    for candidate in all_segments:
+        is_duplicate = False
+        for accepted in unique_segments:
+            if check_overlap(candidate, accepted):
+                is_duplicate = True
+                break
+        
+        if not is_duplicate:
+            unique_segments.append(candidate)
+            
+    print(f"[DEBUG] Deduplication finished. Kept {len(unique_segments)} unique segments.")
+    all_segments = unique_segments
+    # ---------------------------
 
     # Limit to the requested number of segments
     if quantidade_de_virals and len(all_segments) > quantidade_de_virals:

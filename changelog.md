@@ -18,7 +18,6 @@
 - **Instalação via UV**: Criação de script `.bat` para instalação otimizada de dependências utilizando o `uv`, acelerando o processo de setup.
 - **Fixes Gerais**: Correções em diversos componentes que estavam quebrados ou instáveis, garantindo maior estabilidade na execução via UI.
 
-
 ## WebUI 2.0 & Enhanced Configuration
 
 ### WebUI Overhaul

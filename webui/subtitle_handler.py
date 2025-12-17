@@ -26,7 +26,7 @@ SUBTITLE_PRESETS = {
         "italic": False,
         "uppercase": True,
         "highlight_size": 38,
-        "words_per_block": 1,
+        "words_per_block": 3,
         "gap_limit": 0.25,
         "mode": "highlight",
         "underline": False,
@@ -72,7 +72,7 @@ SUBTITLE_PRESETS = {
         "italic": False,
         "uppercase": True,
         "highlight_size": 40,
-        "words_per_block": 1,
+        "words_per_block": 3,
         "gap_limit": 0.4,
         "mode": "highlight",
         "underline": False,
@@ -205,7 +205,7 @@ SUBTITLE_PRESETS = {
         "outline_color": "#000000",
         "outline_thickness": 0,
         "shadow_color": "#000000",
-        "shadow_size": 0,
+        "shadow_size": 1,
         "bold": True,
         "italic": False,
         "uppercase": False,
@@ -356,6 +356,8 @@ def apply_preset(preset):
         )
     return (gr.skip(),) * 20 
 
+import scripts.adjust_subtitles as adjust
+
 def render_preview_video(font, size, color, highlight, outline, outline_thick, shadow, shadow_sz, bold, italic, upper,
                          h_size, w_block, gap, mode, under, strike, border_s, vert_pos, align):
     # Helper to convert HEX to ASS color &HBBGGRR&
@@ -371,58 +373,67 @@ def render_preview_video(font, size, color, highlight, outline, outline_thick, s
     out_c = hex_to_ass(outline)
     shad_c = hex_to_ass(shadow)
     
-    # Handle Mode Logic for Video Preview
-    if mode == "word_by_word":
-        # Make base color fully transparent (Alpha FF)
-        # base_c format is &H00BBGGRR, change 00 to FF
-        base_c = f"&HFF{base_c[4:]}"
-    elif mode == "no_highlight":
-        # Highlight color same as base color
-        high_c = base_c
+    # Paths
+    preview_dir = os.path.join(CURRENT_DIR, "PREVIEW")
+    os.makedirs(preview_dir, exist_ok=True)
     
-    template_path = os.path.join(CURRENT_DIR, "This is a PREVIEW of your subtitles.ass")
-    if not os.path.exists(template_path):
+    json_template = os.path.join(CURRENT_DIR, "preview.json")
+    if not os.path.exists(json_template):
+        print(f"Error: {json_template} not found.")
         return None
         
+    ass_path = os.path.join(preview_dir, "preview.ass")
+    out_vid_path = os.path.join(preview_dir, "preview_render.mp4")
+    
+    # Prepare ASS Bool Values (-1=True, 0=False)
+    bold_val = "-1" if bold else "0"
+    italic_val = "-1" if italic else "0"
+    under_val = "-1" if under else "0"
+    strike_val = "-1" if strike else "0"
+    
     try:
-        with open(template_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            
-        # Replace colors in the Events (The template uses these hardcoded placeholders)
-        # We assume the template uses &H00FFFFFF for base and &H0000FFFF for active
-        content = content.replace('&H00FFFFFF', base_c) 
-        content = content.replace('&H0000FFFF', high_c)
+        # Generate ASS from JSON using the shared script logic
+        # this ensures consistency with the actual video generation
+        adjust.generate_ass_from_file(
+            input_path=json_template,
+            output_path=ass_path,
+            project_folder=preview_dir, # Dummy folder
+            base_color=base_c,
+            base_size=size,
+            highlight_size=h_size,
+            highlight_color=high_c,
+            words_per_block=int(w_block),
+            gap_limit=gap,
+            mode=mode,
+            vertical_position=vert_pos,
+            alignment=align,
+            font=font,
+            outline_color=out_c,
+            shadow_color=shad_c,
+            bold=bold_val,
+            italic=italic_val,
+            underline=under_val,
+            strikeout=strike_val,
+            border_style=border_s,
+            outline_thickness=outline_thick,
+            shadow_size=shadow_sz,
+            uppercase=upper
+        )
         
-        # Construct Style line
-        # Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, ...
-        bold_val = "-1" if bold else "0"
-        italic_val = "-1" if italic else "0"
-        under_val = "-1" if under else "0"
-        strike_val = "-1" if strike else "0"
-        
-        # Note: encoding 1 is Default
-        style_line = f"Style: Default,{font},{size},{base_c},&H00000000,{out_c},{shad_c},{bold_val},{italic_val},{under_val},{strike_val},100,100,0,0,{border_s},{outline_thick},{shadow_sz},2,10,10,10,1"
-        
-        content = re.sub(r"Style: Default,.*", style_line, content)
-        
-        temp_ass = "temp_preview.ass"
-        temp_ass_path = os.path.join(WORKING_DIR, temp_ass)
-        with open(temp_ass_path, "w", encoding='utf-8') as f:
-            f.write(content)
-            
-        out_vid = "preview_render.mp4"
-        out_vid_path = os.path.join(WORKING_DIR, out_vid)
+        # Prepare safe path for ffmpeg filter: escape windows backslashes and colon
+        safe_ass_path = ass_path.replace('\\', '/').replace(':', '\\:')
         
         # Render with ffmpeg
-        # Background color #333333 to match UI roughly
+        # Background color #333333 to match UI roughly. 
+        # Resolution 480x854 (9:16)
         cmd = [
             "ffmpeg", "-y", 
-            "-f", "lavfi", "-i", "color=c=0x333333:s=854x480:d=2.4",
-            "-vf", f"ass={temp_ass}", 
+            "-f", "lavfi", "-i", "color=c=0x333333:s=480x854:d=2.4",
+            "-vf", f"ass='{safe_ass_path}'",
             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-an",
-            out_vid
+            out_vid_path
         ]
-        
+
         subprocess.run(cmd, cwd=WORKING_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         if os.path.exists(out_vid_path):
@@ -430,5 +441,7 @@ def render_preview_video(font, size, color, highlight, outline, outline_thick, s
             
     except Exception as e:
         print(f"Preview Gen Error: {e}")
+        import traceback
+        traceback.print_exc()
         
     return None
