@@ -14,6 +14,7 @@ i18n = I18nAuto()
 
 VIRALS_DIR = os.path.join(BASE_DIR, "VIRALS")
 
+
 # URL Mode: "fastapi" (default) or "gradio"
 URL_MODE = "fastapi"
 
@@ -123,24 +124,40 @@ def generate_project_gallery(project_path_name, is_full_path=False):
                     abs_video = os.path.abspath(video_path)
                     
                     if URL_MODE == "gradio":
-                         # Gradio Launch Mode: Use /file/ + absolute path
-                         # Use raw string for Windows paths ? No, f-string with quote is fine, browser handles it.
-                         # Just ensure we have leading forward slash for route
-                         # Gradio expects /file/<abs_path>
-                         video_src = f"/file/{abs_video}"
+                         # Gradio Launch Mode
+                         # Strategy: STRICT RELATIVE PATH
+                         # With gr.set_static_paths in place, standard /file/relative should work.
                          
-                         # Add timestamp for cache busting
-                         import time
-                         timestamp = int(time.time())
-                         video_src = f"{video_src}?t={timestamp}"
-
+                         cwd = os.getcwd()
+                         norm_path = os.path.normpath(abs_video).replace("\\", "/")
+                         
+                         try:
+                             rel_path = os.path.relpath(norm_path, cwd).replace("\\", "/")
+                         except:
+                             rel_path = norm_path
+                         
+                         rel_path_clean = rel_path.lstrip("/")
+                         path_encoded = urllib.parse.quote(rel_path_clean, safe="/:")
+                         video_src = f"/file/{path_encoded}"
+                         
+                         # Debug Logging
+                         print(f"DEBUG: URL Generation (Strict Relative)")
+                         print(f"DEBUG:   CWD: {cwd}")
+                         print(f"DEBUG:   Rel Path: {rel_path_clean}")
+                         print(f"DEBUG:   Result: {video_src}")
+                         
+                         if os.path.exists(norm_path):
+                             print(f"DEBUG:   File Exists.")
+                         else:
+                             print(f"DEBUG:   File NOT FOUND.")
+                             
                          video_tag = f"""
                         <video controls preload="metadata" playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;">
                             <source src="{video_src}" type="video/mp4">
                             Your browser does not support the video tag.
                         </video>
                         """
-                         download_link = f'<a href="{video_src}" download="{os.path.basename(video_path)}" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="Download" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>'
+                         download_link = f'<a href="{video_src}" target="_blank" download="{os.path.basename(video_path)}" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="Download" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>'
 
                     else:
                         # Use Relative Path through /virals mount

@@ -639,9 +639,10 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
 
 
 def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detection_period=None):
-    mp_face_detection = mp.solutions.face_detection
-    mp_face_mesh = mp.solutions.face_mesh
-    mp_pose = mp.solutions.pose
+    # Lazy init solutions only when needed to avoid AttributeError if import failed partially
+    mp_face_detection = None
+    mp_face_mesh = None
+    mp_pose = None
     
     index = 0
     cuts_folder = os.path.join(project_folder, "cuts")
@@ -673,7 +674,15 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
     
     if should_use_mediapipe:
         try:
-            # Try to init with model_selection=0 (Short Range)
+            # Check if solutions is available (it might not be if import failed silently or partial)
+            if not hasattr(mp, 'solutions'):
+                raise ImportError("mediapipe.solutions not found")
+                
+            mp_face_detection = mp.solutions.face_detection
+            mp_face_mesh = mp.solutions.face_mesh
+            mp_pose = mp.solutions.pose
+            
+            # Try to init with model_selection=0 (Short Range) as a smoketest
             with mp_face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5) as fd:
                 pass
             mediapipe_working = True

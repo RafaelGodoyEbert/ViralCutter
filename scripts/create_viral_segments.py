@@ -225,7 +225,7 @@ OUTPUT FORMAT:
         response_text = ""
         
         # Always save prompt to file (Manual, Gemini, or G4F)
-        manual_prompt_path = os.path.join(project_folder, "prompt.txt")
+        manual_prompt_path = os.path.join(project_folder, f"prompt_part_{i+1}.txt")
         try:
             with open(manual_prompt_path, "w", encoding="utf-8") as f:
                 f.write(prompt)
@@ -287,7 +287,17 @@ OUTPUT FORMAT:
         except Exception as e:
             print(f"Erro desconhecido ao processar chunk: {e}")
 
-    # Retorna o dicionário consolidado
+    # Sort segments by score (descending) to get the best ones globally
+    try:
+        all_segments.sort(key=lambda x: int(x.get('score', 0)), reverse=True)
+    except:
+        pass # If scores are not valid integers, skip sorting or rely on order
+
+    # Limit to the requested number of segments
+    if quantidade_de_virals and len(all_segments) > quantidade_de_virals:
+        print(f"Filtrando os top {quantidade_de_virals} segmentos de {len(all_segments)} candidatos encontrados nos chunks.")
+        all_segments = all_segments[:quantidade_de_virals]
+
     final_result = {"segments": all_segments}
     
     # Validação básica de duração nos resultados (opcional, mas bom pra evitar erros no ffmpeg)

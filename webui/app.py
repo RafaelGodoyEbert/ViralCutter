@@ -381,9 +381,22 @@ if __name__ == "__main__":
     if args.colab:
         print("Running in Colab mode. Generating public link...")
         library.set_url_mode("gradio")
+        
+        # Broaden allowed paths for Colab to avoid permission issues
+        allowed_dirs = [VIRALS_DIR, WORKING_DIR]
+        
+        # Explicitly set static paths for newer Gradio versions
+        try:
+            gr.set_static_paths(paths=allowed_dirs)
+            print(f"DEBUG: Registered static paths: {allowed_dirs}")
+        except AttributeError:
+            print("DEBUG: gr.set_static_paths not available (older Gradio version?)")
+        
+        print(f"DEBUG: Allowed paths for Gradio: {allowed_dirs}")
+        
         # In Colab/Gradio mode, we launch the blocks directly with share=True
         # allowed_paths is needed to serve files via /file/ mechanism
-        demo.queue().launch(share=True, allowed_paths=[VIRALS_DIR, WORKING_DIR])
+        demo.queue().launch(share=True, allowed_paths=allowed_dirs)
     else:
         def open_browser():
             time.sleep(1.5) # Slight delay to ensure server finds port
