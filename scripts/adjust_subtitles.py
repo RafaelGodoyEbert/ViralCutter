@@ -13,32 +13,54 @@ def generate_ass_from_file(input_path, output_path, project_folder,
                            base_color, base_size, highlight_size, highlight_color, 
                            words_per_block, gap_limit, mode, vertical_position, alignment, 
                            font, outline_color, shadow_color, bold, italic, underline, 
-                           strikeout, border_style, outline_thickness, shadow_size, uppercase,
-                           face_modes={}):
+                            strikeout, border_style, outline_thickness, shadow_size, uppercase,
+                            face_modes={}, remove_punctuation=True):
     """
     Generates a single ASS file from a JSON input.
     """
     
     # 1. Load Timeline Data (if exists)
+    # 1. Load Timeline Data (if exists)
     filename = os.path.basename(input_path)
-    match = re.search(r"output(\d+)", filename)
+    base_name = os.path.splitext(filename)[0]
+
+    # Try renamed timeline first (e.g. 000_Title_timeline.json)
+    # Subtitle is 000_Title_processed.json -> 000_Title_timeline.json
+    renamed_timeline_name = base_name.replace("_processed", "") + "_timeline.json"
+    renamed_timeline_path = os.path.join(project_folder, "final", renamed_timeline_name)
+
     timeline_data = None
-    if match:
-         idx = int(match.group(1))
-         # Construct path to timeline
+    idx = None
+
+    if os.path.exists(renamed_timeline_path):
+        try:
+             with open(renamed_timeline_path, "r") as tf:
+                 timeline_data = json.load(tf)
+        except: pass
+    
+    # Check for Index (outputXXX or XXX_Title)
+    match_output = re.search(r"output(\d+)", filename)
+    match_index = re.search(r"^(\d{3})_", filename)
+
+    if match_output:
+        idx = int(match_output.group(1))
+    elif match_index:
+        idx = int(match_index.group(1))
+
+    # Fallback to temp timeline if not already loaded and idx known
+    if not timeline_data and idx is not None:
          csv_timeline = os.path.join(project_folder, "final", f"temp_video_no_audio_{idx}_timeline.json")
          if os.path.exists(csv_timeline):
              try:
                  with open(csv_timeline, "r") as tf:
                      timeline_data = json.load(tf)
-             except:
-                 pass
-    
+             except: pass
+
     # 2. Determine Style Overrides (Face Mode)
     # Determine static alignment (fallback)
-    base_name = os.path.splitext(filename)[0] 
-    key_match = re.search(r"(output\d+)", base_name)
-    key = key_match.group(1) if key_match else base_name
+    key = base_name
+    if idx is not None:
+        key = f"output{str(idx).zfill(3)}"
     
     current_alignment = alignment
     current_vertical_position = vertical_position
@@ -92,14 +114,20 @@ def generate_ass_from_file(input_path, output_path, project_folder,
                 while len(block) < words_per_block and i < total_words:
                     current_word = words[i]
                     if 'word' in current_word:
-                        cleaned_word = re.sub(r'[.,!?;]', '', current_word['word'])
-                        block.append({**current_word, 'word': cleaned_word})
+                        if remove_punctuation:
+                            cleaned_word = re.sub(r'[.,!?;]', '', current_word['word'])
+                            block.append({**current_word, 'word': cleaned_word})
+                        else:
+                            block.append(current_word)
 
                         if i + 1 < total_words:
                             next_word = words[i + 1]
                             if 'start' not in next_word or 'end' not in next_word:
-                                next_cleaned_word = re.sub(r'[.,!?;]', '', next_word['word'])
-                                block[-1]['word'] += " " + next_cleaned_word
+                                if remove_punctuation:
+                                    next_cleaned_word = re.sub(r'[.,!?;]', '', next_word['word'])
+                                    block[-1]['word'] += " " + next_cleaned_word
+                                else:
+                                    block[-1]['word'] += " " + next_word['word']
                                 i += 1
                     i += 1
 
@@ -199,6 +227,8 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
 
+    remove_punctuation = kwargs.get('remove_punctuation', True)
+
     # Load face modes if available
     face_modes = {}
     modes_file = os.path.join(project_folder, "face_modes.json")
@@ -222,7 +252,7 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
                            words_per_block, gap_limit, mode, vertical_position, alignment, 
                            font, outline_color, shadow_color, bold, italic, underline, 
                            strikeout, border_style, outline_thickness, shadow_size, uppercase,
-                           face_modes)
+                           face_modes, remove_punctuation)
 
             print(f"Processed file: {filename} -> {output_filename}")
 

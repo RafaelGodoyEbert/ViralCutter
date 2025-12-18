@@ -160,6 +160,37 @@ def finalize_video(input_file, output_file, index, fps, project_folder, final_fo
         print(f"Warning: No audio extracted for {input_file}")
 
 
+def calculate_mouth_ratio(landmarks):
+    """
+    Calculate Mouth Aspect Ratio (MAR) using 68-point landmarks (inner lips).
+    Indices: 
+    Inner Lips: 60-67 (0-indexed 60 to 67)
+    Left Corner: 60
+    Right Corner: 64
+    Top Center: 62
+    Bottom Center: 66
+    """
+    if landmarks is None:
+        return 0
+    
+    # 3D points (x,y,z) or 2D (x,y). We use first 2 cols.
+    pts = landmarks.astype(float)
+    
+    # Simple vertical vs horizontal
+    # Vertical
+    p62 = pts[62]
+    p66 = pts[66]
+    h = np.linalg.norm(p62[:2] - p66[:2])
+    
+    # Horizontal
+    p60 = pts[60]
+    p64 = pts[64]
+    w = np.linalg.norm(p60[:2] - p64[:2])
+    
+    if w < 1e-6: return 0
+    
+    return h / w
+
 def generate_short_mediapipe(input_file, output_file, index, face_mode, project_folder, final_folder, face_detection, face_mesh, pose, detection_period=None):
     try:
         cap = cv2.VideoCapture(input_file)
@@ -398,7 +429,11 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
     
     finalize_video(input_file, output_file, index, fps, project_folder, final_folder)
 
-def generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode="auto", detection_period=None):
+    finalize_video(input_file, output_file, index, fps, project_folder, final_folder)
+
+    finalize_video(input_file, output_file, index, fps, project_folder, final_folder)
+
+def generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0):
     """Face detection using InsightFace (SOTA)."""
     print(f"Processing (InsightFace): {input_file} | Mode: {face_mode}")
     
@@ -439,7 +474,15 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     # Timeline tracking: list of (frame_index, mode_str)
     # We will compress this later.
     timeline_frames = [] # Store mode for *every written frame* or at least detection points
-
+    
+    timeline_frames = [] # Store mode for *every written frame* or at least detection points
+    
+    # For Active Speaker Logic
+    # Map of "Face ID" to activity score?
+    # Since we don't have ID tracker, we blindly assign score to faces based on proximity to previous frame
+    # A list of dictionaries: [{'center': (x,y), 'activity': score}, ...]
+    faces_activity_state = [] 
+    
     for frame_index in range(total_frames):
         if buffered_frame is not None:
              frame = buffered_frame
@@ -454,6 +497,155 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
         if frame_index >= next_detection_frame and len(transition_frames) == 0:
             # Detect faces
             faces = detect_faces_insightface(frame)
+            if faces:
+                scores = [f"{f.get('det_score',0):.2f}" for f in faces]
+                print(f"DEBUG: Frame {frame_index} | Raw Faces: {len(faces)} | Scores: {scores}")
+            else:
+                pass # print(f"DEBUG: Frame {frame_index} | No Raw Faces")
+
+            # --- ACTIVITY / SPEAKER DETECTION ---
+            # (Feature currently disabled for stability - relying on simple size checks)
+            last_raw_faces = faces 
+            # ------------------------------------
+
+            # --- INTELLIGENT FILTERING ---
+            valid_faces = []
+            if faces:
+                # 1. Filter by confidence (Using user threshold)
+                faces = [f for f in faces if f.get('det_score', 0) > confidence_threshold]
+                
+                if faces:
+                    # Pre-calculate areas and SPEAKER SCORE
+                    for f in faces:
+                        w = f['bbox'][2] - f['bbox'][0]
+                        h = f['bbox'][3] - f['bbox'][1]
+                        f['area'] = w * h
+                        f['center'] = ((f['bbox'][0] + f['bbox'][2]) / 2, (f['bbox'][1] + f['bbox'][3]) / 2)
+                        
+                        act = f.get('activity', 0)
+                        f['effective_area'] = f['area'] * (1.0 + (act * 0.05))
+
+                    # Find largest face
+                    max_area = max(f['area'] for f in faces)
+                    
+                    # 2. Relative Size Filter
+                    valid_faces = [f for f in faces if f['area'] > (filter_threshold * max_area)]
+                    
+                    if len(valid_faces) < len(faces):
+                        print(f"DEBUG: Filtered {len(faces)-len(valid_faces)} small faces. Max Area: {max_area}. Filter Thresh: {filter_threshold}")
+                    
+                    faces = valid_faces
+            
+            # --- ACTIVE SPEAKER UPDATE ---
+            if faces:
+                # 1. Update activity scores for current faces
+                # Simple matching to previous state
+                current_state_map = []
+                
+                for f in faces:
+                    # Calculate instantaneous openness
+                    mar = 0
+                    if 'landmark_3d_68' in f:
+                        mar = calculate_mouth_ratio(f['landmark_3d_68'])
+                    elif 'landmark_2d_106' in f:
+                        # Fallback or Todo: map 106 to 68 approximate
+                        # 106 indices: 52-71 are lips.
+                        # Inner roughly 64-71?
+                        # Let's rely on 3d_68 which is standard in buffalo_l
+                        pass
+                    
+                    f['mouth_ratio'] = mar
+                    # Heuristic: Ratio > 0.05 implies openish, > 0.1 talk.
+                    # Adjust thresholds: 0.03 is common for closed mouth, 0.05 is starting to open.
+                    
+                    # Log raw MAR for debugging
+                    # print(f"DEBUG: Frame {frame_index} Face {i} MAR: {mar:.4f}")
+                    
+                    is_talking = 1.0 if mar > active_speaker_mar else 0.0 
+                    
+
+            # Update Activity State - Two Pass for Global Motion Compensation
+            if focus_active_speaker and faces:
+                # Pass 1: Global Motion (Camera Shake) Calculation
+                # We calculate motion for ALL confident faces (before size filtering) to get best global estimate
+                raw_motions = []
+                
+                # First, ensure we have a temporary mapping of current faces to history
+                # We do this non-destructively just to get motion values
+                for f in faces:
+                    my_c = f['center']
+                    best_dist = 9999
+                    if faces_activity_state:
+                         for old_s in faces_activity_state:
+                             old_c = old_s['center']
+                             dist = np.sqrt((my_c[0]-old_c[0])**2 + (my_c[1]-old_c[1])**2)
+                             if dist < best_dist:
+                                 best_dist = dist
+                    
+                    if best_dist < 200:
+                        f['_raw_motion'] = best_dist
+                    else:
+                        f['_raw_motion'] = 0.0
+                    
+                    if include_motion:
+                        raw_motions.append(f['_raw_motion'])
+
+                global_motion = 0.0
+                if include_motion and len(raw_motions) >= 2:
+                    global_motion = min(raw_motions)
+
+                # Pass 2: Update Scores for ALL faces
+                current_state_map = []
+                for f in faces:
+                     # Helper: Is talking?
+                     is_talking = f.get('mouth_ratio', 0) > active_speaker_mar
+                     
+                     # Calculate Compensated Motion
+                     motion_bonus = 0.0
+                     if include_motion and faces_activity_state:
+                         comp_motion = max(0.0, f.get('_raw_motion', 0.0) - global_motion)
+                         f['motion_val'] = comp_motion # Store for debug
+                         
+                         if comp_motion > active_speaker_motion_deadzone:
+                              motion_bonus = min(2.5, (comp_motion - active_speaker_motion_deadzone) * active_speaker_motion_sensitivity)
+                     else:
+                        f['motion_val'] = 0.0
+                     
+                     # Accumulate Score
+                     matched_score = 0.0
+                     
+                     # Re-find match to update history
+                     my_c = f['center']
+                     best_dist = 9999
+                     best_idx = -1
+                     if faces_activity_state:
+                         for i, old_s in enumerate(faces_activity_state):
+                             old_c = old_s['center']
+                             dist = np.sqrt((my_c[0]-old_c[0])**2 + (my_c[1]-old_c[1])**2)
+                             if dist < best_dist:
+                                 best_dist = dist
+                                 best_idx = i
+                     
+                     if best_idx != -1 and best_dist < 200:
+                         old_val = faces_activity_state[best_idx]['activity']
+                         change = -abs(active_speaker_decay)
+                         if is_talking:
+                             change = 1.5
+                         
+                         new_val = old_val + change + motion_bonus
+                         # Increased cap to 20.0 to allow motion differences to separate two 'talking' faces
+                         matched_score = max(0.0, min(20.0, new_val))
+                     else:
+                         matched_score = 1.0 if is_talking else 0.0
+                     
+                     f['activity_score'] = matched_score
+                     current_state_map.append({'center': f['center'], 'activity': matched_score})
+                 
+                faces_activity_state = current_state_map
+            else:
+                faces_activity_state = []
+
+            faces = valid_faces
             
             # Decide 1 or 2 faces
             target_faces = 1
@@ -461,9 +653,70 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                 target_faces = 2
             elif face_mode == "auto":
                 if len(faces) >= 2:
-                    target_faces = 2
+                    # Default decision variable
+                    decided = False
+                    
+                    if focus_active_speaker:
+                         # EXPERIMENTAL: Decide based on activity
+                         f1 = faces[0]
+                         f2 = faces[1]
+                         score1 = f1.get('activity_score', 0)
+                         score2 = f2.get('activity_score', 0)
+                         
+                         y1 = f1['center'][1]
+                         y2 = f2['center'][1]
+                         pos1 = "Top" if y1 < y2 else "Bottom"
+                         pos2 = "Top" if y2 < y1 else "Bottom"
+                         
+                         # Debug Active Speaker
+                         print(f"DEBUG: Frame {frame_index} | {pos1} (MAR: {f1.get('mouth_ratio',0):.3f}, Mov: {f1.get('motion_val',0):.1f}, Score: {score1:.1f}) | {pos2} (MAR: {f2.get('mouth_ratio',0):.3f}, Mov: {f2.get('motion_val',0):.1f}, Score: {score2:.1f})")
+
+
+                         # If one is clearly dominant active speaker
+                         # Lower threshold to make it more sensitive?
+                         # Score difference > 2.0 (approx 2-3 frames of talking difference vs silence)
+                         diff = abs(score1 - score2)
+                         # Check strict dominance first
+                         if diff > active_speaker_score_diff:
+                             # Pick the winner
+                             target_faces = 1
+                             decided = True
+                             # Ensure the list is sorted by activity so [0] is the winner
+                             if score2 > score1:
+                                 # Swap ensures [0] is the active one for later 1-face crop logic which takes [0]
+                                 faces = [f2, f1]
+                             print(f"DEBUG: Active Speaker Focus Triggered! Diff ({diff:.2f}) > Thresh ({active_speaker_score_diff}). Focusing on Face {'2' if score2 > score1 else '1'}.")
+                             
+                         elif score1 > 4.0 and score2 > 4.0:
+                             # Both talking -> 2 faces
+                             # Raised threshold to 4.0 to avoid noise triggering split
+                             target_faces = 2
+                             decided = True
+                             print(f"DEBUG: Dual Active Speakers! Both scores > 4.0. Forcing Split Mode.")
+                         
+                         # If scores are low (both silent), fallback to size ratio (decided=False) or force 1 if very silent?
+                         # Let's fallback to size.
+
+                    if not decided:
+                        # Standard Logic: Check relative sizes (effective area)
+                        faces_sorted_temp = sorted(faces, key=lambda f: f.get('effective_area', 0), reverse=True)
+                        largest = faces_sorted_temp[0]['effective_area']
+                        second = faces_sorted_temp[1]['effective_area']
+    
+                        # Two-Face Constraint
+                        if second > (two_face_threshold * largest):
+                            target_faces = 2
+                        else:
+                            target_faces = 1
                 else:
                     target_faces = 1
+            
+            # If no faces found effectively after filter
+            if not faces and not valid_faces:
+                 # Logic ensures faces = valid_faces already
+                 pass
+            
+            # -----------------------------
             
             # Fallback Lookahead: If detection fails or partial
             if len(faces) < target_faces:
@@ -471,10 +724,28 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                 ret2, frame2 = cap.read()
                 if ret2 and frame2 is not None:
                      faces2 = detect_faces_insightface(frame2)
+                     
+                     # --- Apply same filtering to lookahead ---
+                     valid_faces2 = []
+                     if faces2:
+                         faces2 = [f for f in faces2 if f.get('det_score', 0) > 0.50]
+                         if faces2:
+                             for f in faces2:
+                                 w = f['bbox'][2] - f['bbox'][0]
+                                 h = f['bbox'][3] - f['bbox'][1]
+                                 f['area'] = w * h
+                                 f['center'] = ((f['bbox'][0] + f['bbox'][2]) / 2, (f['bbox'][1] + f['bbox'][3]) / 2)
+                                 f['effective_area'] = f['area'] # Default for lookahead
+                             max_area2 = max(f['area'] for f in faces2)
+                             # STRICTER FILTER: threshold of max area
+                             valid_faces2 = [f for f in faces2 if f['area'] > (filter_threshold * max_area2)]
+                     faces2 = valid_faces2
+                     # ----------------------------------------
+
+
                      # If lookahead found what we wanted OR found something better than nothing
                      if len(faces2) >= target_faces:
                          faces = faces2 # Use lookahead faces for current frame
-                         # (This assumes movement is small enough between 1 frame to be valid)
                      elif len(faces) == 0 and len(faces2) > 0:
                          faces = faces2 # Better than nothing
                          
@@ -483,13 +754,41 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
             detections = []
             
             if len(faces) >= target_faces:
-                # Pick top N faces by area
-                faces_sorted = sorted(faces, key=lambda f: (f['bbox'][2]-f['bbox'][0]) * (f['bbox'][3]-f['bbox'][1]), reverse=True)
+                # --- FACE TRACKING / SORTING ---
+                # Instead of just Area, we prioritize faces closer to the LAST detected face
+                # This prevents switching to a background person if sizes are similar
+                
+                if last_detected_faces is not None and len(last_detected_faces) == target_faces:
+                   # Define score function: High Area is good, Low Distance to old is good.
+                   # But simpler: calculate Intersection over Union (IOU) or Distance to old bbox center
+                   
+                   # We want to match existing slots.
+                   # For 1 face:
+                   if target_faces == 1:
+                       old_center = get_center_bbox(last_detected_faces[0])
+                       
+                       def sort_score(f):
+                           # Distance score (lower is better)
+                           dist = np.sqrt((f['center'][0] - old_center[0])**2 + (f['center'][1] - old_center[1])**2)
+                           # EFFECTIVE Area score (higher is better)
+                           # Weight distance more heavily to keep consistency, but allow activity to swap focus if significant
+                           # normalized score?
+                           return dist - (f['effective_area'] * 0.0001) 
+                       
+                       faces_sorted = sorted(faces, key=sort_score)
+                   else:
+                       # For 2 faces, just sort by effective area for now as proximity sort happens later
+                       faces_sorted = sorted(faces, key=lambda f: f['effective_area'], reverse=True)
+                else:
+                   # No history, sort by effective area
+                   if focus_active_speaker and target_faces == 1:
+                        # Pick the one with highest activity score
+                        faces_sorted = sorted(faces, key=lambda f: f.get('activity_score', 0), reverse=True)
+                   else:
+                        faces_sorted = sorted(faces, key=lambda f: f.get('effective_area', 0), reverse=True)
                 
                 if target_faces == 2:
-                    # Convert [x1, y1, x2, y2] to (x, y, w, h) for two_face compatibility logic or custom logic
-                    # We will store [x1, y1, x2, y2] for interpolation, and convert during crop
-                    
+                    # Convert [x1, y1, x2, y2] to (x, y, w, h) logic is later
                     # Ensure we have 2 faces
                     f1 = faces_sorted[0]['bbox']
                     f2 = faces_sorted[1]['bbox']
@@ -508,24 +807,63 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                  # If we wanted 2 but found 1, or wanted 1 found 0
                  if len(faces) > 0:
                      # Fallback to 1 face if found at least 1
-                     faces_sorted = sorted(faces, key=lambda f: (f['bbox'][2]-f['bbox'][0]) * (f['bbox'][3]-f['bbox'][1]), reverse=True)
+                     faces_sorted = sorted(faces, key=lambda f: f['effective_area'], reverse=True)
                      detections = [faces_sorted[0]['bbox']]
                      current_num_faces_state = 1
                  else:
                      detections = []
 
             if detections:
-                if last_frame_face_positions is not None and len(last_frame_face_positions) == len(detections):
-                    # Transition
-                    start_faces = np.array(last_frame_face_positions)
-                    end_faces = np.array(detections)
+                # --- STABILIZATION (DEAD ZONE) ---
+                # Check if movement is small enough to ignore
+                if last_detected_faces is not None and len(last_detected_faces) == len(detections):
+                    is_stable = True
+                    for i in range(len(detections)):
+                        old_c = get_center_bbox(last_detected_faces[i])
+                        new_c = get_center_bbox(detections[i])
+                        dist = np.sqrt((old_c[0]-new_c[0])**2 + (old_c[1]-new_c[1])**2)
+                        
+                        # Threshold: dead_zone variable (pixels)
+                        # Reduced jitter for talking heads
+                        if dist > dead_zone: 
+                            is_stable = False
+                            break
                     
-                    steps = transition_duration
-                    transition_frames = []
-                    for s in range(steps):
-                        t = (s + 1) / steps
-                        interp = (1 - t) * start_faces + t * end_faces
-                        transition_frames.append(interp.astype(int).tolist())
+                    if is_stable:
+                        # Keep old position to prevent "shaky cam"
+                        detections = last_detected_faces
+                        # Clear transition logic (snap) or keep it empty
+                        transition_frames = []
+                # ---------------------------------
+
+                if last_frame_face_positions is not None and len(last_frame_face_positions) == len(detections):
+                    # Only transition if we decided to MOVE (i.e., not stable)
+                    forced_transition = True
+                    if last_detected_faces is not None and len(detections) == len(last_detected_faces):
+                         # Manual check to avoid numpy ambiguity
+                         arrays_equal = True
+                         for i in range(len(detections)):
+                             if not np.array_equal(detections[i], last_detected_faces[i]):
+                                 arrays_equal = False
+                                 break
+                         if arrays_equal:
+                             forced_transition = False
+
+                    if not transition_frames and forced_transition:
+                        # Transition
+                        start_faces = np.array(last_frame_face_positions)
+                        end_faces = np.array(detections)
+                        
+                        steps = transition_duration
+                        transition_frames = []
+                        for s in range(steps):
+                            t = (s + 1) / steps
+                            interp = (1 - t) * start_faces + t * end_faces
+                            transition_frames.append(interp.astype(int).tolist())
+                        
+                        # Optimization removed to avoid "Ambiguous truth value of array" error
+                        # if detections == last_detected_faces: caused crash
+                    
                 else:
                     # Reset transition if face count changed or first detect
                     transition_frames = []
@@ -638,7 +976,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     return "1"
 
 
-def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detection_period=None):
+def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, segments_data=None):
     # Lazy init solutions only when needed to avoid AttributeError if import failed partially
     mp_face_detection = None
     mp_face_mesh = None
@@ -695,10 +1033,36 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
     # Logic for MediaPipe replaced by dynamic pass
     # mp_num_faces = 2 if face_mode == "2" else 1  
 
-    while True:
-        input_filename = f"output{str(index).zfill(3)}_original_scale.mp4"
-        input_file = os.path.join(cuts_folder, input_filename)
+    import glob
+    found_files = sorted(glob.glob(os.path.join(cuts_folder, "*_original_scale.mp4")))
+
+    if not found_files:
+        print(f"No files found in {cuts_folder}.")
+        # Try finding lookahead in case listdir failed? No, glob is fine.
+        return
+
+    for input_file in found_files:
+        input_filename = os.path.basename(input_file)
+        
+        # Extract Index
+        index = 0
+        try:
+             parts = input_filename.split('_')
+             if parts[0].isdigit(): index = int(parts[0])
+             elif input_filename.startswith("output"): # output000
+                 idx_str = input_filename[6:9]
+                 if idx_str.isdigit(): index = int(idx_str)
+        except: pass
+        
         output_file = os.path.join(final_folder, f"temp_video_no_audio_{index}.mp4")
+
+        # Determine Final Name (Title)
+        base_name_final = input_filename.replace("_original_scale.mp4", "")
+        # If legacy name, try to improve it
+        if input_filename.startswith("output") and segments_data and index < len(segments_data):
+             title = segments_data[index].get("title", f"Segment_{index}")
+             safe_title = "".join([c for c in title if c.isalnum() or c in " _-"]).strip().replace(" ", "_")[:60]
+             base_name_final = f"{index:03d}_{safe_title}"
 
         if os.path.exists(input_file):
             success = False
@@ -708,10 +1072,17 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
             if insightface_working:
                 try:
                     # Capture returned mode
-                    res = generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode=face_mode, detection_period=detection_period)
+                    res = generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode=face_mode, detection_period=detection_period, 
+                                                     filter_threshold=filter_threshold, two_face_threshold=two_face_threshold, confidence_threshold=confidence_threshold, dead_zone=dead_zone, focus_active_speaker=focus_active_speaker,
+                                                     active_speaker_mar=active_speaker_mar, active_speaker_score_diff=active_speaker_score_diff, include_motion=include_motion,
+                                                     active_speaker_motion_deadzone=active_speaker_motion_deadzone,
+                                                     active_speaker_motion_sensitivity=active_speaker_motion_sensitivity,
+                                                     active_speaker_decay=active_speaker_decay)
                     if res: detected_mode = res
                     success = True
                 except Exception as e:
+                    import traceback
+                    traceback.print_exc()
                     print(f"InsightFace processing failed for {input_filename}: {e}")
                     print("Falling back to MediaPipe/Haar...")
             
@@ -746,15 +1117,57 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
             if not success:
                 generate_short_fallback(input_file, output_file, index, project_folder, final_folder)
                 detected_mode = "1"
+                success = True
             
             # Save mode
             face_modes_log[f"output{str(index).zfill(3)}"] = detected_mode
 
-        else:
-            if index == 0:
-                print(f"No files found in {cuts_folder}.")
-            break
-        index += 1
+        if success:
+             try:
+                 new_mp4_name = f"{base_name_final}.mp4"
+                 new_mp4_path = os.path.join(final_folder, new_mp4_name)
+                 
+                 # Source is what finalize_video created
+                 # finalize_video creates `final-output{index}_processed.mp4`
+                 generated_mp4_name = f"final-output{str(index).zfill(3)}_processed.mp4"
+                 generated_mp4_path = os.path.join(final_folder, generated_mp4_name)
+                 
+                 # 1. Rename MP4
+                 if os.path.exists(generated_mp4_path):
+                     if os.path.exists(new_mp4_path): os.remove(new_mp4_path)
+                     os.rename(generated_mp4_path, new_mp4_path)
+                     print(f"Renamed Output to Title: {new_mp4_name}")
+                     
+                     # 2. Rename JSON Subtitle (if exists and hasn't been renamed by cut_segments)
+                     subs_folder = os.path.join(project_folder, "subs")
+                     
+                     # Check if legacy name exists
+                     old_json_name = f"final-output{str(index).zfill(3)}_processed.json"
+                     old_json_path = os.path.join(subs_folder, old_json_name)
+                     
+                     new_json_name = f"{base_name_final}_processed.json"
+                     new_json_path = os.path.join(subs_folder, new_json_name)
+                     
+                     if os.path.exists(old_json_path):
+                         if os.path.exists(new_json_path): os.remove(new_json_path)
+                         os.rename(old_json_path, new_json_path)
+                         print(f"Renamed Subtitles to Title: {new_json_name}")
+                         
+                     # 3. Rename Timeline JSON
+                     # Timeline is temp_video_no_audio_{index}_timeline.json (created by generate_short...)
+                     old_timeline_name = f"temp_video_no_audio_{index}_timeline.json"
+                     old_timeline_path = os.path.join(final_folder, old_timeline_name)
+                     
+                     new_timeline_name = f"{base_name_final}_timeline.json"
+                     new_timeline_path = os.path.join(final_folder, new_timeline_name)
+                     
+                     if os.path.exists(old_timeline_path):
+                         if os.path.exists(new_timeline_path): os.remove(new_timeline_path)
+                         os.rename(old_timeline_path, new_timeline_path)
+                         print(f"Renamed Timeline to Title: {new_timeline_name}")
+                         
+             except Exception as e:
+                 print(f"Warning: Could not rename file with title: {e}") 
         
     # Save Face Modes to JSON for subtitle usage
     modes_file = os.path.join(project_folder, "face_modes.json")

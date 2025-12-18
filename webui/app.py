@@ -90,8 +90,9 @@ def update_ai_settings(backend):
 
 
 def run_viral_cutter(input_source, project_name, url, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, 
+                     face_filter_thresh, face_two_thresh, face_conf_thresh, face_dead_zone, focus_active_speaker, active_speaker_mar, active_speaker_score_diff, include_motion, active_speaker_motion_threshold, active_speaker_motion_sensitivity, active_speaker_decay,
                      use_custom_subs, font_name, font_size, font_color, highlight_color, outline_color, outline_thickness, shadow_color, shadow_size, is_bold, is_italic, is_uppercase, vertical_pos, alignment,
-                     h_size, w_block, gap, mode, under, strike, border_s):
+                     h_size, w_block, gap, mode, under, strike, border_s, remove_punc):
     
     global current_process
     yield "", gr.update(value=i18n("Running..."), interactive=False), gr.update(visible=True), None 
@@ -130,6 +131,26 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
     cmd.extend(["--face-model", face_model])
     cmd.extend(["--face-mode", face_mode])
     if face_detect_interval: cmd.extend(["--face-detect-interval", str(face_detect_interval)])
+    
+    # New Face Params
+    if face_filter_thresh is not None: cmd.extend(["--face-filter-threshold", str(face_filter_thresh)])
+    if face_two_thresh is not None: cmd.extend(["--face-two-threshold", str(face_two_thresh)])
+    if face_conf_thresh is not None: cmd.extend(["--face-confidence-threshold", str(face_conf_thresh)])
+    if face_dead_zone is not None: cmd.extend(["--face-dead-zone", str(face_dead_zone)])
+
+
+    
+    cmd.append("--skip-prompts")
+    
+    if focus_active_speaker:
+        cmd.append("--focus-active-speaker")
+        if active_speaker_mar is not None: cmd.extend(["--active-speaker-mar", str(active_speaker_mar)])
+        if active_speaker_score_diff is not None: cmd.extend(["--active-speaker-score-diff", str(active_speaker_score_diff)])
+        if include_motion: cmd.append("--include-motion")
+        if active_speaker_motion_threshold is not None: cmd.extend(["--active-speaker-motion-threshold", str(active_speaker_motion_threshold)])
+        if active_speaker_motion_sensitivity is not None: cmd.extend(["--active-speaker-motion-sensitivity", str(active_speaker_motion_sensitivity)])
+        if active_speaker_decay is not None: cmd.extend(["--active-speaker-decay", str(active_speaker_decay)])
+
     cmd.append("--skip-prompts") # Always skip prompts in WebUI to prevent freezing
 
     if use_custom_subs:
@@ -138,7 +159,7 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
             "outline_color": convert_color_to_ass(outline_color), "outline_thickness": outline_thickness, "shadow_color": convert_color_to_ass(shadow_color),
             "shadow_size": shadow_size, "vertical_position": vertical_pos, "alignment": alignment, "bold": 1 if is_bold else 0, "italic": 1 if is_italic else 0, 
             "underline": 1 if under else 0, "strikeout": 1 if strike else 0, "border_style": border_s, "words_per_block": int(w_block), "gap_limit": gap,
-            "mode": mode, "highlight_size": int(h_size)
+            "mode": mode, "highlight_size": int(h_size), "remove_punctuation": remove_punc
         }
         # Uppercase is handled in main script or logic? 
         # Actually subtitle_config doesn't seem to natively support "uppercase" in get_subtitle_config default, but app.py was using it. 
@@ -256,8 +277,30 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         face_mode_input = gr.Dropdown(choices=[(i18n("Auto"), "auto"), ("1", "1"), ("2", "2")], label=i18n("Face Mode"), value="auto")
                         face_detect_interval_input = gr.Textbox(label=i18n("Face Det. Interval"), value="0.17,1.0")
                     
+                    
                     # Update listeners now that all components are defined
                     input_source.change(on_source_change, inputs=input_source, outputs=[url_input, project_selector, workflow_input])
+             
+             with gr.Accordion(i18n("Advanced Face Settings"), open=False):
+                 with gr.Row():
+                      face_filter_thresh_input = gr.Slider(label=i18n("Ignore Small Faces (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.35, step=0.05, info=i18n("Relative size to ignore background."))
+                      face_two_thresh_input = gr.Slider(label=i18n("Threshold for 2 Faces (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.60, step=0.05, info=i18n("Size of 2nd face to activate split mode."))
+                      face_conf_thresh_input = gr.Slider(label=i18n("Minimum Confidence (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.70, step=0.05, info=i18n("Ignore detections with low confidence."))
+                      face_dead_zone_input = gr.Slider(label=i18n("Dead Zone (Stabilization)"), minimum=0, maximum=200, value=150, step=5, info=i18n("Movement pixels to ignore."))
+
+                 with gr.Accordion(i18n("Experimental: Active Speaker & Motion"), open=False):
+                     focus_active_speaker_input = gr.Checkbox(label=i18n("Experimental: Focus on Speaker"), value=False, info=i18n("Tries to focus only on the speaking person instead of split screen."))
+                     with gr.Row():
+                          active_speaker_mar_input = gr.Slider(label=i18n("MAR Threshold (Mouth Open)"), minimum=0.01, maximum=0.20, value=0.03, step=0.005, info=i18n("Mouth open sensitivity."))
+                          active_speaker_score_diff_input = gr.Slider(label=i18n("Score Difference"), minimum=0.5, maximum=10.0, value=1.5, step=0.5, info=i18n("Minimum difference to focus on 1 face."))
+                          
+                     with gr.Row():
+                          include_motion_input = gr.Checkbox(label=i18n("Consider Motion"), value=False, info=i18n("Increases score with motion (gestures)."))
+                        
+                     with gr.Row():
+                          active_speaker_motion_threshold_input = gr.Slider(label=i18n("Motion Dead Zone"), minimum=0.0, maximum=20.0, value=3.0, step=0.5, info=i18n("Pixels ignored."))
+                          active_speaker_motion_sensitivity_input = gr.Slider(label=i18n("Motion Sensitivity"), minimum=0.01, maximum=0.5, value=0.05, step=0.01, info=i18n("Points per pixel."))
+                          active_speaker_decay_input = gr.Slider(label=i18n("Switch Speed"), minimum=0.5, maximum=5.0, value=2.0, step=0.5, info=i18n("Speed to lose focus."))
              with gr.Accordion(i18n("Subtitle Settings (alpha)"), open=False):
                 preset_input = gr.Dropdown(choices=[(i18n("Manual"), "Manual")] + [(k, k) for k in subs.SUBTITLE_PRESETS.keys()], label=i18n("Quick Presets"), value="Hormozi (Classic)")
                 use_custom_subs = gr.Checkbox(label=i18n("Enable Subtitle Customization (Includes Preset)"), value=True)
@@ -292,6 +335,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         bold_input = gr.Checkbox(label=i18n("Bold"))
                         italic_input = gr.Checkbox(label=i18n("Italic"))
                         uppercase_input = gr.Checkbox(label=i18n("Uppercase"))
+                        remove_punc_input = gr.Checkbox(label=i18n("Remove Punctuation"), value=True)
                         underline_input = gr.Checkbox(label=i18n("Underline"))
                         strikeout_input = gr.Checkbox(label=i18n("Strikeout"))
                         
@@ -309,7 +353,8 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     bold_input, italic_input, uppercase_input,
                     highlight_size_input, words_per_block_input, gap_limit_input, mode_input,
                     underline_input, strikeout_input, border_style_input,
-                    vertical_pos_input, alignment_input
+                    vertical_pos_input, alignment_input,
+                    remove_punc_input
                 ]
                 
                 # Update manual inputs when preset changes
@@ -337,11 +382,13 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
              logs_output = gr.Textbox(label=i18n("Logs"), lines=10, autoscroll=True)
              results_html = gr.HTML(label=i18n("Results"))
              
-             # MUST pass all new inputs to the run function
+             # MUST pass all all new inputs to the run function
              start_btn.click(run_viral_cutter, inputs=[
                  input_source, project_selector, url_input, segments_input, viral_input, themes_input, min_dur_input, max_dur_input, 
                  model_input, ai_backend_input, api_key_input, ai_model_input, chunk_size_input, 
                  workflow_input, face_model_input, face_mode_input, face_detect_interval_input, 
+                 face_filter_thresh_input, face_two_thresh_input, face_conf_thresh_input, face_dead_zone_input, focus_active_speaker_input, 
+                 active_speaker_mar_input, active_speaker_score_diff_input, include_motion_input, active_speaker_motion_threshold_input, active_speaker_motion_sensitivity_input, active_speaker_decay_input,
                  use_custom_subs, 
                  # Expanded Manual Inputs mapping
                  font_name_input, font_size_input, font_color_input, highlight_color_input, 
@@ -349,7 +396,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                  bold_input, italic_input, uppercase_input, vertical_pos_input, alignment_input,
                  # New Inputs
                  highlight_size_input, words_per_block_input, gap_limit_input, mode_input, 
-                 underline_input, strikeout_input, border_style_input
+                 underline_input, strikeout_input, border_style_input, remove_punc_input
              ], outputs=[logs_output, start_btn, stop_btn, results_html])
 
 
@@ -418,7 +465,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                               outline_color, outline_thickness, shadow_color, shadow_size, 
                               is_bold, is_italic, is_uppercase, 
                               h_size, w_block, gap, mode, under, strike, border_s, 
-                              vertical_pos, alignment):
+                              vertical_pos, alignment, remove_punc):
                 
                 if not json_path: return i18n("No file loaded.")
                 
@@ -439,7 +486,8 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         "underline": 1 if under else 0, "strikeout": 1 if strike else 0, 
                         "border_style": border_s, "words_per_block": int(w_block), 
                         "gap_limit": gap, "mode": mode, "highlight_size": int(h_size),
-                        "uppercase": 1 if is_uppercase else 0
+                        "uppercase": 1 if is_uppercase else 0,
+                        "remove_punctuation": remove_punc
                     }
                     try:
                         with open(subtitle_config_path, "w", encoding="utf-8") as f:
@@ -467,7 +515,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                            outline_color, outline_thickness, shadow_color, shadow_size, 
                            is_bold, is_italic, is_uppercase, 
                            h_size, w_block, gap, mode, under, strike, border_s, 
-                           vertical_pos, alignment):
+                           vertical_pos, alignment, remove_punc):
                 if not proj_name: return i18n("No project selected.")
                 
                 # Save config
@@ -485,7 +533,8 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         "underline": 1 if under else 0, "strikeout": 1 if strike else 0, 
                         "border_style": border_s, "words_per_block": int(w_block), 
                         "gap_limit": gap, "mode": mode, "highlight_size": int(h_size),
-                        "uppercase": 1 if is_uppercase else 0
+                        "uppercase": 1 if is_uppercase else 0,
+                        "remove_punctuation": remove_punc
                     }
                     subtitle_config_path = os.path.join(WORKING_DIR, "temp_subtitle_config.json")
                     try:

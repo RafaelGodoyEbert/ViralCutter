@@ -86,6 +86,12 @@ def burn(project_folder="tmp"):
             # Define o caminho para a legenda correspondente
             subtitle_file = os.path.join(subs_folder, f"{video_name}.ass")
             
+            # Tentar também com sufixo _processed caso a convenção seja diferente
+            if not os.path.exists(subtitle_file):
+                subtitle_file_processed = os.path.join(subs_folder, f"{video_name}_processed.ass")
+                if os.path.exists(subtitle_file_processed):
+                    subtitle_file = subtitle_file_processed
+            
             # Verifica se a legenda existe
             if os.path.exists(subtitle_file):
                 # Define o caminho de saída para o vídeo com legendas

@@ -1,5 +1,12 @@
 # Changelog
 
+## Active Speaker & Face Controls
+
+### Controles Avançados de Face e Falante Ativo
+- **Filtros de Face**: Controle granular para ignorar rostos pequenos, definir limite de confiança minimiza falsos positivos e "Zona Morta" para estabilizar a câmera.
+- **Experimental: Active Speaker**: Novo modo experimental que tenta focar na pessoa que está falando (detecção de boca aberta e movimento), em vez de sempre dividir a tela.
+- **Legendas**: Opção para remover pontuação automaticamente.
+
 ## Editor de Legenda JSON
 
 ### Funcionalidades

@@ -33,7 +33,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 180,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": True
     },
 
     "Hormozi (Classic)": {
@@ -56,7 +57,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 200,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": True
     },
 
     "Beasty (Loud)": {
@@ -79,7 +81,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 190,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": True
     },
 
     "Word Killer (TikTok)": {
@@ -102,7 +105,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 210,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": True
     },
 
     "Rapid Fire (Sprint)": {
@@ -125,7 +129,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 210,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": True
     },
 
     "Educational Fast": {
@@ -148,7 +153,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 220,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": False
     },
 
     "Podcast Viral (Centered)": {
@@ -171,7 +177,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 240,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": True
     },
 
     "Drama Emocional": {
@@ -194,7 +201,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 235,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": True
     },
 
     "Story Subtitle (Netflix Style)": {
@@ -217,7 +225,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 3,
         "vertical_position": 250,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": False
     },
 
     "Neon Cyber": {
@@ -240,7 +249,8 @@ SUBTITLE_PRESETS = {
         "strikeout": False,
         "border_style": 1,
         "vertical_position": 205,
-        "alignment": 2
+        "alignment": 2,
+        "remove_punctuation": True
     },
 
     "Retro Pixel": {
@@ -268,7 +278,7 @@ SUBTITLE_PRESETS = {
 }
 
 def generate_preview_html(font, size, color, highlight, outline, outline_thick, shadow, shadow_sz, bold, italic, upper, 
-                          h_size, w_block, gap, mode, under, strike, border_s, vert_pos, align):
+                          h_size, w_block, gap, mode, under, strike, border_s, vert_pos, align, remove_punc):
     weight = "bold" if bold else "normal"
     style = "italic" if italic else "normal"
     transform = "uppercase" if upper else "none"
@@ -352,14 +362,15 @@ def apply_preset(preset):
             p["shadow_size"], p["bold"], p["italic"], p["uppercase"],
             p["highlight_size"], p["words_per_block"], p["gap_limit"], p["mode"],
             p["underline"], p["strikeout"], p["border_style"],
-            p.get("vertical_position", 210), p.get("alignment", 2)
+            p.get("vertical_position", 210), p.get("alignment", 2),
+            p.get("remove_punctuation", True)
         )
-    return (gr.skip(),) * 20 
+    return (gr.skip(),) * 21 
 
 import scripts.adjust_subtitles as adjust
 
 def render_preview_video(font, size, color, highlight, outline, outline_thick, shadow, shadow_sz, bold, italic, upper,
-                         h_size, w_block, gap, mode, under, strike, border_s, vert_pos, align):
+                         h_size, w_block, gap, mode, under, strike, border_s, vert_pos, align, remove_punc):
     # Helper to convert HEX to ASS color &HBBGGRR&
     def hex_to_ass(h):
         if not h: return "&H00FFFFFF"
@@ -417,7 +428,9 @@ def render_preview_video(font, size, color, highlight, outline, outline_thick, s
             border_style=border_s,
             outline_thickness=outline_thick,
             shadow_size=shadow_sz,
-            uppercase=upper
+            uppercase=upper,
+            face_modes={}, 
+            remove_punctuation=remove_punc
         )
         
         # Prepare safe path for ffmpeg filter: escape windows backslashes and colon

@@ -72,6 +72,7 @@ def get_subtitle_config(config_path=None):
         "outline_color": f"&H{outline_transparency}{COLORS['grey']}&",
         "shadow_size": 2,
         "shadow_color": f"&H{shadow_color_transparency}{COLORS['black']}&",
+        "remove_punctuation": True,
     }
 
     if config_path and os.path.exists(config_path):
@@ -120,6 +121,17 @@ def main():
     parser.add_argument("--face-mode", choices=["auto", "1", "2"], default="auto", help="Face tracking mode: auto, 1, 2")
     parser.add_argument("--subtitle-config", help="Path to subtitle configuration JSON file")
     parser.add_argument("--face-detect-interval", type=str, default="0.17,1.0", help="Face detection interval in seconds. Single value or 'interval_1face,interval_2face'")
+    parser.add_argument("--face-filter-threshold", type=float, default=0.35, help="Relative area threshold to ignore background faces (default: 0.35)")
+    parser.add_argument("--face-two-threshold", type=float, default=0.60, help="Relative area threshold to trigger 2-face mode (default: 0.60)")
+    parser.add_argument("--face-confidence-threshold", type=float, default=0.30, help="Face detection confidence threshold (0.0 - 1.0) (default: 0.30)")
+    parser.add_argument("--face-dead-zone", type=str, default="40", help="Camera movement dead zone in pixels (default: 40)") # str to support future "auto"
+    parser.add_argument("--focus-active-speaker", action="store_true", help="Enable experimental active speaker focus (InsightFace only)")
+    parser.add_argument("--active-speaker-mar", type=float, default=0.03, help="Mouth Aspect Ratio threshold for active speaker (0.0 - 1.0) (default: 0.03)")
+    parser.add_argument("--active-speaker-score-diff", type=float, default=1.5, help="Score difference to focus on active speaker (default: 1.5)")
+    parser.add_argument("--include-motion", action="store_true", help="Include motion (body/head movement) in activity score")
+    parser.add_argument("--active-speaker-motion-threshold", type=float, default=3.0, help="Motion deadzone in pixels (default: 3.0)")
+    parser.add_argument("--active-speaker-motion-sensitivity", type=float, default=0.05, help="Motion sensitivity multiplier (default: 0.05)")
+    parser.add_argument("--active-speaker-decay", type=float, default=2.0, help="Activity score decay rate (default: 2.0)")
     parser.add_argument("--skip-prompts", action="store_true", help="Skip interactive prompts and use defaults/existing files")
 
     args = parser.parse_args()
@@ -172,7 +184,7 @@ def main():
             if user_input:
                 url = user_input
     
-    if not url:
+    if not url and not input_video:
         # Usuário apertou Enter (Vazio) -> Tentar pegar último projeto
         base_virals = "VIRALS"
         if os.path.exists(base_virals):
@@ -216,6 +228,10 @@ def main():
                     with open(viral_segments_file, 'r', encoding='utf-8') as f:
                         viral_segments = json.load(f)
                     print(i18n("Loaded existing viral segments. Skipping configuration prompts."))
+                    if viral_segments and "segments" in viral_segments:
+                        print(f"DEBUG: Loaded {len(viral_segments['segments'])} segments from file.")
+                    else:
+                        print("DEBUG: Loaded JSON but 'segments' key is missing or empty.")
                 except Exception as e:
                     print(i18n("Error loading JSON: {}.").format(e))
 
@@ -384,7 +400,7 @@ def main():
             print(i18n("Workflow 3: Skipping Transcribe."))
             # We assume transcription exists (SRT/JSON) or we won't need it for 'adjust_subtitles' if it uses 'subs/*.json' which are created by 'cut_segments'
             # Actually 'adjust_subtitles' reads from 'project_folder/subs'.
-            viral_segments = True # Skip checking
+            # viral_segments = True # Removed to avoid overwritting dict loaded earlier
         else:
             print(i18n("Transcribing with model {}...").format(args.model))
             # Se skip config, args.model é default
@@ -406,8 +422,12 @@ def main():
                         except Exception as e:
                             print(i18n("Error loading existing JSON: {}. Proceeding to create new segments.").format(e))
                     else:
-                        # Ask user if they want to use it
-                        pass # (Logic for interactive mode can be added here if needed, but keeping it simple as per request)
+                        print(i18n("Loading existing viral segments found at {}").format(viral_segments_file_late))
+                        try:
+                            with open(viral_segments_file_late, 'r', encoding='utf-8') as f:
+                                viral_segments = json.load(f)
+                        except Exception as e:
+                            print(i18n("Error loading existing JSON: {}.").format(e))
                     
                 if not viral_segments:
                     print(i18n("Creating viral segments using {}...").format(ai_backend.upper()))
@@ -466,9 +486,72 @@ def main():
         # 5. Edit Video (Face Crop)
         if workflow_choice != "3":
             print(i18n("Editing video with {} (Mode: {})...").format(face_model, face_mode))
-            edit_video.edit(project_folder=project_folder, face_model=face_model, face_mode=face_mode, detection_period=detection_intervals)
+            
+            # Parse dead zone safely
+            try:
+                dead_zone_val = float(args.face_dead_zone)
+            except:
+                dead_zone_val = 40.0
+                
+            edit_video.edit(
+                project_folder=project_folder, 
+                face_model=face_model, 
+                face_mode=face_mode, 
+                detection_period=detection_intervals,
+                filter_threshold=args.face_filter_threshold,
+                two_face_threshold=args.face_two_threshold,
+                confidence_threshold=args.face_confidence_threshold,
+                dead_zone=dead_zone_val,
+                focus_active_speaker=args.focus_active_speaker,
+                active_speaker_mar=args.active_speaker_mar,
+                active_speaker_score_diff=args.active_speaker_score_diff,
+                include_motion=args.include_motion,
+                active_speaker_motion_deadzone=args.active_speaker_motion_threshold,
+                active_speaker_motion_sensitivity=args.active_speaker_motion_sensitivity,
+                active_speaker_decay=args.active_speaker_decay,
+                segments_data=viral_segments.get("segments", []) if viral_segments else None
+            )
+
+
         else:
             print(i18n("Workflow 3: Skipping Face Crop."))
+            # Rename existing files if viral_segments available (since edit_video didn't run)
+            if viral_segments and "segments" in viral_segments:
+                 segments_data = viral_segments.get("segments", [])
+                 final_folder = os.path.join(project_folder, "final")
+                 subs_folder = os.path.join(project_folder, "subs")
+                 
+                 print("Renaming existing files with titles...")
+                 for idx, segment in enumerate(segments_data):
+                     title = segment.get("title", f"Segment_{idx}")
+                     safe_title = "".join([c for c in title if c.isalnum() or c in " _-"]).strip()
+                     safe_title = safe_title.replace(" ", "_")[:60]
+                     
+                     new_base_name = f"{idx:03d}_{safe_title}"
+                     
+                     # 1. MP4
+                     old_mp4_name = f"final-output{idx:03d}_processed.mp4"
+                     old_mp4_path = os.path.join(final_folder, old_mp4_name)
+                     new_mp4_path = os.path.join(final_folder, f"{new_base_name}.mp4")
+                     if os.path.exists(old_mp4_path) and not os.path.exists(new_mp4_path):
+                         os.rename(old_mp4_path, new_mp4_path)
+                         print(f"Renamed (Workflow 3): {old_mp4_name} -> {new_base_name}.mp4")
+
+                     # 2. JSON Sub
+                     old_json_name = f"final-output{idx:03d}_processed.json"
+                     old_json_path = os.path.join(subs_folder, old_json_name)
+                     new_json_path = os.path.join(subs_folder, f"{new_base_name}_processed.json")
+                     if os.path.exists(old_json_path) and not os.path.exists(new_json_path):
+                         os.rename(old_json_path, new_json_path)
+                         print(f"Renamed (Workflow 3): {old_json_name} -> {new_base_name}_processed.json")
+                         
+                     # 3. Timeline
+                     old_tl_name = f"temp_video_no_audio_{idx}_timeline.json"
+                     old_tl_path = os.path.join(final_folder, old_tl_name)
+                     new_tl_path = os.path.join(final_folder, f"{new_base_name}_timeline.json")
+                     if os.path.exists(old_tl_path) and not os.path.exists(new_tl_path):
+                         os.rename(old_tl_path, new_tl_path)
+                         print(f"Renamed (Workflow 3): {old_tl_name} -> {new_base_name}_timeline.json")
 
         # 6. Subtitles
         burn_subtitles_option = True 
@@ -491,6 +574,60 @@ def main():
         # Organização Final (Opcional, pois agora já está tudo em project_folder)
         # organize_output.organize(project_folder=project_folder)
         
+        # --- Save Processing Configuration ---
+        try:
+            # Determine AI Model used
+            used_ai_model = args.ai_model_name
+            if not used_ai_model and ai_backend != "manual":
+                if ai_backend == "gemini":
+                    used_ai_model = api_config.get("gemini", {}).get("model", "default")
+                elif ai_backend == "g4f":
+                    used_ai_model = api_config.get("g4f", {}).get("model", "default")
+            
+            # Ensure sub_config exists
+            current_sub_config = sub_config if 'sub_config' in locals() else get_subtitle_config(args.subtitle_config)
+            
+            final_config = {
+                "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "workflow": workflow_choice,
+                "ai_config": {
+                    "backend": ai_backend,
+                    "model_name": used_ai_model,
+                    "viral_mode": viral_mode,
+                    "themes": themes,
+                    "num_segments": num_segments,
+                    "chunk_size": args.chunk_size
+                },
+                "face_config": {
+                    "model": face_model,
+                    "mode": face_mode,
+                    "detect_interval": args.face_detect_interval,
+                    "filter_threshold": args.face_filter_threshold,
+                    "two_face_threshold": args.face_two_threshold,
+                    "confidence_threshold": args.face_confidence_threshold,
+                    "dead_zone": args.face_dead_zone,
+                    "focus_active_speaker": args.focus_active_speaker,
+                    "active_speaker_mar": args.active_speaker_mar,
+                    "active_speaker_score_diff": args.active_speaker_score_diff,
+                    "include_motion": args.include_motion
+                },
+                "video_config": {
+                    "min_duration": args.min_duration,
+                    "max_duration": args.max_duration,
+                    "whisper_model": args.model
+                },
+                "subtitle_config": current_sub_config
+            }
+
+            config_save_path = os.path.join(project_folder, "process_config.json")
+            with open(config_save_path, "w", encoding="utf-8") as f:
+                json.dump(final_config, f, indent=4, ensure_ascii=False)
+            print(i18n("Configuration saved to: {}").format(config_save_path))
+            
+        except Exception as e:
+            print(i18n("Error saving configuration JSON: {}").format(e))
+        # -------------------------------------
+
         print(i18n("Process completed! Check your results in: {}").format(project_folder))
 
     except Exception as e:

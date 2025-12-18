@@ -41,6 +41,16 @@ def init_insightface():
         # But redirection is safer for C++ logs
         providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
         
+        try:
+            import onnxruntime as ort
+            available = ort.get_available_providers()
+            print(f"InsightFace: Available ONNX Providers: {available}")
+            if 'CUDAExecutionProvider' not in available:
+                print("WARNING: CUDAExecutionProvider not found. InsightFace will likely run on CPU.")
+                print("To fix, install onnxruntime-gpu: pip install onnxruntime-gpu")
+        except Exception as e:
+            print(f"InsightFace: Could not check available providers: {e}")
+
         with suppress_stdout_stderr():
             app = FaceAnalysis(name='buffalo_l', providers=providers)
             app.prepare(ctx_id=0, det_size=(640, 640))
@@ -61,11 +71,17 @@ def detect_faces_insightface(frame):
     for face in faces:
         # Convert bbox to int
         bbox = face.bbox.astype(int)
-        results.append({
+        res = {
             'bbox': bbox, # [x1, y1, x2, y2]
             'kps': face.kps,
             'det_score': face.det_score
-        })
+        }
+        if hasattr(face, 'landmark_2d_106') and face.landmark_2d_106 is not None:
+             res['landmark_2d_106'] = face.landmark_2d_106
+        if hasattr(face, 'landmark_3d_68') and face.landmark_3d_68 is not None:
+             res['landmark_3d_68'] = face.landmark_3d_68
+             
+        results.append(res)
     return results
 
 def crop_and_resize_insightface(frame, face_bbox, target_width=1080, target_height=1920):

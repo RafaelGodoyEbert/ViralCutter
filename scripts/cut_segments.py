@@ -91,7 +91,13 @@ def cut(segments, project_folder="tmp", skip_video=False):
                     start_time_seconds = int(h) * 3600 + int(m) * 60 + float(s)
                     start_time_str = str(start_time)
 
-            output_filename = f"output{str(i).zfill(3)}_original_scale.mp4"
+            # Título para nome de arquivo
+            title = segment.get("title", f"Segment_{i}")
+            safe_title = "".join([c for c in title if c.isalnum() or c in " _-"]).strip()
+            safe_title = safe_title.replace(" ", "_")[:60]
+            base_name = f"{i:03d}_{safe_title}"
+
+            output_filename = f"{base_name}_original_scale.mp4"
             output_path = os.path.join(cuts_folder, output_filename)
 
             print(f"Processing segment {i+1}/{len(segments)}")
@@ -141,8 +147,8 @@ def cut(segments, project_folder="tmp", skip_video=False):
             # --- JSON CUTTING (ALWAYS RUN) ---
             end_time_seconds = start_time_seconds + float(duration_seconds)
             
-            # Nome do json correspondente ao vídeo FINAL que será gerado (final-outputXXX)
-            json_output_filename = f"final-output{str(i).zfill(3)}_processed.json"
+            # Nome do json correspondente ao vídeo FINAL com titulo
+            json_output_filename = f"{base_name}_processed.json"
             json_output_path = os.path.join(subs_folder, json_output_filename)
             
             cut_json.cut_json_transcript(input_json_path, json_output_path, start_time_seconds, end_time_seconds)
