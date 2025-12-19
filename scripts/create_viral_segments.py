@@ -37,6 +37,38 @@ def clean_json_response(response_text):
     
     return json.loads(response_text.strip())
 
+
+def preprocess_transcript_for_ai(segments):
+    """
+    Concatenates transcript segments into a single string with embedded time tags.
+    Tags are inserted at the beginning (0s) and roughly every 4 seconds thereafter.
+    Format: "Word word word (4s) word word..."
+    """
+    if not segments:
+        return ""
+
+    full_text = ""
+    last_tag_time = -100  # Force first tag
+    
+    # Try to start with (0s) based on first segment
+    first_start = segments[0].get('start', 0)
+    full_text += f"({int(first_start)}s) "
+    last_tag_time = first_start
+
+    for seg in segments:
+        text = seg.get('text', '').strip()
+        end_time = seg.get('end', 0)
+        
+        # Add text
+        full_text += text + " "
+        
+        # Add tag if ~4 seconds passed since last tag
+        if end_time - last_tag_time >= 4:
+            full_text += f"({int(end_time)}s) "
+            last_tag_time = end_time
+
+    return full_text.strip()
+
 def call_gemini(prompt, api_key, model_name='gemini-2.5-flash-lite-preview-09-2025'):
     if not HAS_GEMINI:
         raise ImportError("A biblioteca 'google-generativeai' não está instalada. Instale com: pip install google-generativeai")
@@ -93,18 +125,57 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
     # Ler transcrição
     input_tsv = os.path.join(project_folder, 'input.tsv')
     input_srt = os.path.join(project_folder, 'input.srt')
+
+    # Parse Input into Segments first
+    transcript_segments = []
     
-    # Fallback pro SRT se TSV não existir
-    if not os.path.exists(input_tsv):
-        print(f"Aviso: {input_tsv} não encontrado. Tentando ler do SRT raw.")
-        if os.path.exists(input_srt):
-             with open(input_srt, 'r', encoding='utf-8') as f:
-                content = f.read()
-        else:
-            raise FileNotFoundError(f"Nenhum arquivo de transcrição encontrado em {project_folder}")
-    else:
-        with open(input_tsv, 'r', encoding='utf-8') as f:
-            content = f.read()
+    # Try to load TSV first (more reliable time)
+    if os.path.exists(input_tsv):
+        try:
+            with open(input_tsv, 'r', encoding='utf-8') as f:
+                # Skip header
+                lines = f.readlines()[1:] 
+                for line in lines:
+                    parts = line.strip().split('\t')
+                    if len(parts) >= 3:
+                        start_ms = float(parts[0])
+                        end_ms = float(parts[1])
+                        text = parts[2]
+                        transcript_segments.append({
+                            'start': start_ms / 1000.0, 
+                            'end': end_ms / 1000.0, 
+                            'text': text
+                        })
+        except Exception as e:
+            print(f"Error parsing TSV: {e}")
+
+    # Fallback to SRT parser if TSV empty/failed
+    if not transcript_segments and os.path.exists(input_srt):
+         with open(input_srt, 'r', encoding='utf-8') as f:
+             srt_content = f.read()
+         # Simple SRT Regex Parser
+         # Matches: index, time range, text
+         pattern = re.compile(r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n((?:(?!\n\n).)*)', re.DOTALL)
+         matches = pattern.findall(srt_content)
+         
+         def srt_time_to_seconds(t_str):
+             h, m, s = t_str.replace(',', '.').split(':')
+             return int(h) * 3600 + int(m) * 60 + float(s)
+
+         for m in matches:
+             start_sec = srt_time_to_seconds(m[1])
+             end_sec = srt_time_to_seconds(m[2])
+             text = m[3].replace('\n', ' ')
+             transcript_segments.append({'start': start_sec, 'end': end_sec, 'text': text})
+
+    if not transcript_segments:
+        raise ValueError("Could not parse transcript from TSV or SRT.")
+
+    # Generate Pre-processed Content with Time Tags
+    formatted_content = preprocess_transcript_for_ai(transcript_segments)
+    
+    # Use formatted content for chunking
+    content = formatted_content
 
     # Load Config and Prompt
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -164,18 +235,14 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
     else:
         # Fallback se arquivo nao existir
         print("Aviso: prompt.txt não encontrado. Usando prompt interno.")
-        system_prompt_template = """You are a Viral Segment Identifier. 
+        system_prompt_template = """You are a World-Class Viral Video Editor.
 {context_instruction}
-Given the following video transcript chunk, {virality_instruction}.
-CONSTRAINTS:
-- Each segment duration: {min_duration}s to {max_duration}s.
-- Cuts MUST MAKE SENSE contextually.
-- RETURN ONLY VALID JSON.
-
-TRANSCRIPT CHUNK:
+Analyze the transcript below with time tags (XXs). Find {amount} viral segments.
+Constraints: {min_duration}s - {max_duration}s.
+IMPORTANT: Output "Title", "Hook", and "Reasoning" in the SAME LANGUAGE as the transcript (e.g., if transcript is Portuguese, output Portuguese).
+TRANSCRIPT:
 {transcript_chunk}
-
-OUTPUT FORMAT:
+OUTPUT JSON ONLY:
 {json_template}"""
 
 
@@ -183,12 +250,12 @@ OUTPUT FORMAT:
             { "segments" :
                 [
                     {
-                        "title": "Suggested Viral Title on same language of tsv",
-                        "start_time": number,
-                        "end_time": number,
-                        "hook": "On-screen hook text that grabs attention",
-                        "duration": 0,
-                        "score": 0  # Probability of going viral (0-100)
+                        "start_text": "Exact first 5-10 words of the segment",
+                        "end_text": "Exact last 5-10 words of the segment",
+                        "start_time_ref": "Value of closest (XXs) tag",
+                        "title": "Viral Hook Title (Same Language as Transcript)",
+                        "reasoning": "Why this is viral? Hook? Value? (Same Language as Transcript)",
+                        "score": 95
                     }
                 ]
             }
@@ -210,11 +277,14 @@ OUTPUT FORMAT:
     while start < content_len:
         end = min(start + chunk_size, content_len)
         
-        # Align End to newline to avoid cutting sentences
+        # Align End to newline to avoid cutting sentences is useless here since we process raw text line.
+        # But our `formatted_content` has newlines from preprocess? Actually `preprocess_transcript_for_ai` concats with " ".
+        # So we look for space.
+        
         if end < content_len:
-            last_newline = content.rfind('\n', start, end)
-            if last_newline != -1 and last_newline > start:
-                end = last_newline
+            last_space = content.rfind(' ', start, end)
+            if last_space != -1 and last_space > start:
+                end = last_space
         
         chunk_text = content[start:end]
         if chunk_text.strip(): # Avoid empty chunks
@@ -226,14 +296,11 @@ OUTPUT FORMAT:
         # Prepare start for next chunk (Backtrack by overlap)
         next_start = max(start + 1, end - overlap_size)
         
-        # Align next_start to a newline for clean start
-        # Find newline strictly before next_start? Or nearest?
-        # Safe bet: Find last newline before 'next_start' but after 'start'
-        safe_newline = content.rfind('\n', start, next_start)
-        if safe_newline != -1:
-            start = safe_newline + 1
+        # Align next_start to space
+        safe_space = content.rfind(' ', start, next_start)
+        if safe_space != -1:
+            start = safe_space + 1
         else:
-            # If no newline found (huge block of text), just use next_start
             start = next_start
 
     if viral_mode:
@@ -369,46 +436,176 @@ OUTPUT FORMAT:
     except:
         pass # If scores are not valid integers, skip sorting or rely on order
 
-    # --- DEDUPLICATION LOGIC ---
-    # Merge overlapping segments. Prioritize higher score.
-    unique_segments = []
+    # --- POST-PROCESSING: Match Text to Timestamps ---
+    processed_segments = []
     
-    def check_overlap(seg1, seg2):
-        # Convert times to float just in case
-        try:
-            s1, e1 = float(seg1.get('start_time', 0)), float(seg1.get('end_time', 0))
-            s2, e2 = float(seg2.get('start_time', 0)), float(seg2.get('end_time', 0))
-            
-            # Calculate intersection
-            start_max = max(s1, s2)
-            end_min = min(e1, e2)
-            
-            if end_min > start_max:
-                intersection = end_min - start_max
-                duration1 = e1 - s1
-                duration2 = e2 - s2
-                # If intersection covers > 30% of the smaller segment, consider it a duplicate
-                min_dur = min(duration1, duration2)
-                if min_dur > 0 and (intersection / min_dur) > 0.3:
-                    return True
-            return False
-        except:
-            return False
+    # Helper to find text in segments
+    def find_timestamp_by_text(target_text, segments_list, start_search_idx=0, is_end=False):
+        # Normalize target
+        target_clean = "".join(target_text.lower().split())
+        if not target_clean: return None, start_search_idx
 
-    print(f"[DEBUG] Starting Deduplication on {len(all_segments)} raw segments...")
-    
-    for candidate in all_segments:
-        is_duplicate = False
-        for accepted in unique_segments:
-            if check_overlap(candidate, accepted):
-                is_duplicate = True
-                break
+        current_concat = ""
+        param_idx = -1
         
-        if not is_duplicate:
-            unique_segments.append(candidate)
+        # Sliding window or simple linear scan?
+        # Linear scan matches sequences of words.
+        # We look for the FIRST occurrence of target_text in segments_list starting from start_search_idx
+        
+        # Optimization: Create a long string of remaining segments and find index, then map back?
+        # Better: iterate segments.
+        
+        for i in range(start_search_idx, len(segments_list)):
+            seg_text = segments_list[i]['text']
+            # We treat this simple: check if target is basically inside this segment or spanning a few.
+            # Since target is "5-10 words", it might span 2 segments.
             
-    print(f"[DEBUG] Deduplication finished. Kept {len(unique_segments)} unique segments.")
+            # Simple approach: Check if target (normalized) is substring of 
+            # (prev + current + next) normalized.
+            # This is complex. 
+            
+            # SIMPLER APPROACH:
+            # The AI returns 'start_time_ref' (e.g., "(12s)").
+            # We jump to that time in segments_list.
+            # Then we look for the text in that vicinity.
+            pass
+        
+        return None, -1
+
+    # SIMPLIFIED MATCHING LOGIC
+    # 1. Use 'start_time_ref' to find approximate index.
+    # 2. Search locally for 'start_text'.
+    # 3. Search forward for 'end_text'.
+    
+    print(f"[DEBUG] Matching {len(all_segments)} raw segments to timestamps...")
+    
+    for seg in all_segments:
+        try:
+            # 1. Parse Reference Time
+            ref_time_str = seg.get('start_time_ref', '(0s)')
+            ref_time_val = 0
+            try:
+                ref_time_val = int(re.search(r'\d+', ref_time_str).group())
+            except:
+                ref_time_val = 0
+                
+            # Find segment index closest to ref_time
+            start_idx = 0
+            min_diff = 999999
+            for i, s in enumerate(transcript_segments):
+                diff = abs(s['start'] - ref_time_val)
+                if diff < min_diff:
+                    min_diff = diff
+                    start_idx = i
+                if s['start'] > ref_time_val + 10: # Stop if we went too far
+                    break
+            
+            # Backtrack a bit in case Ref was slightly off or text started earlier
+            start_idx = max(0, start_idx - 5)
+            
+            # 2. Find Exact Start Text
+            start_text_target = seg.get('start_text', '').lower().strip()
+            # Normalize: remove punctuation
+            start_text_target = re.sub(r'[^\w\s]', '', start_text_target)
+            
+            final_start_time = -1
+            match_start_idx = -1
+            
+            # Search window: forward 50 segments
+            search_limit = min(len(transcript_segments), start_idx + 50)
+            
+            for i in range(start_idx, search_limit):
+                s_text = transcript_segments[i]['text'].lower()
+                s_text = re.sub(r'[^\w\s]', '', s_text)
+                
+                # Check for partial match (start of sentence)
+                if start_text_target and (start_text_target in s_text or s_text in start_text_target):
+                    final_start_time = transcript_segments[i]['start']
+                    match_start_idx = i
+                    break
+            
+            # Fallback: use Ref Time if text match fails
+            if final_start_time == -1:
+                final_start_time = transcript_segments[start_idx]['start'] if start_idx < len(transcript_segments) else ref_time_val
+                match_start_idx = start_idx
+
+            # 3. Find End Text (starting from match_start_idx)
+            end_text_target = seg.get('end_text', '').lower().strip()
+            end_text_target = re.sub(r'[^\w\s]', '', end_text_target)
+            
+            final_end_time = -1
+            
+            if match_start_idx != -1:
+                # Search forward for end text, extended range
+                # Use a larger window but we will sanity check duration later
+                search_end_limit = min(len(transcript_segments), match_start_idx + 200)
+                
+                for i in range(match_start_idx, search_end_limit):
+                    s_text = transcript_segments[i]['text'].lower()
+                    s_text = re.sub(r'[^\w\s]', '', s_text)
+                    
+                    if end_text_target and (end_text_target in s_text or s_text in end_text_target):
+                         final_end_time = transcript_segments[i]['end']
+                         break
+            
+            # Fallback End Time checking Duration
+            if final_end_time == -1:
+                 final_end_time = final_start_time + tempo_minimo # safe default
+            
+            # Calculate Duration
+            duration = final_end_time - final_start_time
+            
+            # Validate Duration (Min)
+            if duration < 5: 
+                duration = tempo_minimo
+                final_end_time = final_start_time + duration
+            
+            # Validate Duration (Max)
+            # If AI selected start and end points that result in a huge segment, clamp it.
+            if duration > tempo_maximo:
+                print(f"[WARN] Segmento excede max duration ({duration:.2f}s > {tempo_maximo}s). Cortando para {tempo_maximo}s.")
+                final_end_time = final_start_time + tempo_maximo
+                duration = tempo_maximo
+
+            # Construct Final Segment
+            processed_segments.append({
+                "title": seg.get('title', 'Viral Segment'),
+                "start_time": final_start_time,
+                "end_time": final_end_time,
+                "hook": seg.get('title', ''), # Use title as hook text
+                "reasoning": seg.get('reasoning', ''),
+                "score": seg.get('score', 0),
+                "duration": duration
+            })
+
+        except Exception as e:
+            print(f"[WARN] Error processing segment {seg}: {e}")
+            continue
+
+    # Deduplication (Keep highest score)
+    unique_segments = []
+    # Sort by Score desc
+    processed_segments.sort(key=lambda x: int(x.get('score', 0)), reverse=True)
+    
+    for candidate in processed_segments:
+        is_dup = False
+        for existing in unique_segments:
+            s1, e1 = candidate['start_time'], candidate['end_time']
+            s2, e2 = existing['start_time'], existing['end_time']
+            
+            overlap_start = max(s1, s2)
+            overlap_end = min(e1, e2)
+            
+            if overlap_end > overlap_start:
+                intersection = overlap_end - overlap_start
+                if intersection > 5: # more than 5 seconds overlap
+                    is_dup = True
+                    break
+        if not is_dup:
+            unique_segments.append(candidate)
+
     all_segments = unique_segments
+    print(f"[DEBUG] Finished processing. {len(all_segments)} segments valid.")
     # ---------------------------
 
     # Limit to the requested number of segments

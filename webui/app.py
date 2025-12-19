@@ -25,6 +25,22 @@ sys.path.append(WORKING_DIR)
 from i18n.i18n import I18nAuto
 i18n = I18nAuto()
 
+# --- PRESETS DEFINITIONS ---
+FACE_PRESETS = {
+    "Default (Balanced)": {"thresh": 0.35, "two_face": 0.60, "conf": 0.40, "dead_zone": 150},
+    "Stable (Focus Main)": {"thresh": 0.60, "two_face": 0.80, "conf": 0.60, "dead_zone": 200},
+    "Sensitive (Catch All)": {"thresh": 0.10, "two_face": 0.40, "conf": 0.30, "dead_zone": 100},
+    "High Precision": {"thresh": 0.40, "two_face": 0.65, "conf": 0.75, "dead_zone": 150},
+}
+
+EXPERIMENTAL_PRESETS = {
+    "Default (Off)": {"focus": False, "mar": 0.03, "score": 1.5, "motion": False, "motion_th": 3.0, "motion_sens": 0.05, "decay": 2.0},
+    "Active Speaker (Balanced)": {"focus": True, "mar": 0.03, "score": 1.5, "motion": True, "motion_th": 3.0, "motion_sens": 0.05, "decay": 2.0},
+    "Active Speaker (Sensitive)": {"focus": True, "mar": 0.02, "score": 1.0, "motion": True, "motion_th": 2.0, "motion_sens": 0.10, "decay": 1.0},
+    "Active Speaker (Stable)": {"focus": True, "mar": 0.05, "score": 2.5, "motion": False, "motion_th": 5.0, "motion_sens": 0.02, "decay": 3.0},
+}
+# ---------------------------
+
 VIRALS_DIR = os.path.join(WORKING_DIR, "VIRALS")
 
 # Ensure VIRALS dir exists
@@ -86,13 +102,27 @@ def update_ai_settings(backend):
         # Manual
         return gr.update(visible=False), gr.update(visible=False)
 
+def apply_face_preset(preset_name):
+    if preset_name not in FACE_PRESETS:
+        return [gr.update() for _ in range(4)] # No change
+    
+    p = FACE_PRESETS[preset_name]
+    return p["thresh"], p["two_face"], p["conf"], p["dead_zone"]
+
+def apply_experimental_preset(preset_name):
+    if preset_name not in EXPERIMENTAL_PRESETS:
+        return [gr.update() for _ in range(7)] # No change
+        
+    p = EXPERIMENTAL_PRESETS[preset_name]
+    return p["focus"], p["mar"], p["score"], p["motion"], p["motion_th"], p["motion_sens"], p["decay"]
+
 # Subtitle logic moved to subtitle_handler.py
 
 
 def run_viral_cutter(input_source, project_name, url, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, 
                      face_filter_thresh, face_two_thresh, face_conf_thresh, face_dead_zone, focus_active_speaker, active_speaker_mar, active_speaker_score_diff, include_motion, active_speaker_motion_threshold, active_speaker_motion_sensitivity, active_speaker_decay,
                      use_custom_subs, font_name, font_size, font_color, highlight_color, outline_color, outline_thickness, shadow_color, shadow_size, is_bold, is_italic, is_uppercase, vertical_pos, alignment,
-                     h_size, w_block, gap, mode, under, strike, border_s, remove_punc):
+                     h_size, w_block, gap, mode, under, strike, border_s, remove_punc, video_quality, use_youtube_subs, translate_target):
     
     global current_process
     yield "", gr.update(value=i18n("Running..."), interactive=False), gr.update(visible=True), None 
@@ -106,12 +136,17 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
              return
         full_project_path = os.path.join(VIRALS_DIR, project_name)
         cmd.extend(["--project-path", full_project_path])
-        # Force workflow 3 or trust user? 
-        # If user selected "Existing Project", they might want to re-cut (Workflow 2) or re-sub (Workflow 3). 
-        # But commonly they want to re-sub.
-        # We'll use whatever 'workflow' dropdown says.
     else:
         if url: cmd.extend(["--url", url])
+        # Pass Video Quality
+        if video_quality: cmd.extend(["--video-quality", video_quality])
+        # Pass Subtitle Option (if False, we skip)
+        if not use_youtube_subs: cmd.append("--skip-youtube-subs")
+        
+    # Translation
+    if translate_target and translate_target != "None":
+            cmd.extend(["--translate-target", translate_target])
+
     
     cmd.extend(["--segments", str(int(segments))])
     if viral: cmd.append("--viral")
@@ -237,6 +272,12 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     input_source = gr.Radio([(i18n("YouTube URL"), "YouTube URL"), (i18n("Existing Project"), "Existing Project")], label=i18n("Input Source"), value="YouTube URL")
                     
                     url_input = gr.Textbox(label=i18n("YouTube URL"), placeholder="https://www.youtube.com/watch?v=...", visible=True)
+                    
+                    with gr.Row():
+                        video_quality_input = gr.Dropdown(choices=["best", "1080p", "720p", "480p"], label=i18n("Video Quality"), value="best")
+                        translate_input = gr.Dropdown(choices=["None", "pt", "en", "es", "fr", "de", "it", "ru", "ja", "ko", "zh-CN"], label=i18n("Translate Subtitles To"), value="None")
+                        use_youtube_subs_input = gr.Checkbox(label=i18n("Use YouTube Subs"), value=True, info=i18n("Download and use official subtitles if available. (Recommended, it speeds up the process)"))
+
                     project_selector = gr.Dropdown(choices=[], label=i18n("Select Project"), visible=False)
                     
                     def on_source_change(source):
@@ -269,7 +310,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     # Update logic
                     ai_backend_input.change(update_ai_settings, inputs=ai_backend_input, outputs=[ai_model_input, chunk_size_input])
 
-                    model_input = gr.Dropdown(["large-v3-turbo", "medium", "small"], label=i18n("Whisper Model"), value="large-v3-turbo")
+                    model_input = gr.Dropdown(["tiny", "small", "medium", "large", "large-v1", "large-v2", "large-v3", "turbo", "large-v3-turbo", "distil-large-v2", "distil-medium.en", "distil-small.en", "distil-large-v3"], label=i18n("Whisper Model"), value="large-v3-turbo")
                     with gr.Row():
                         workflow_input = gr.Dropdown(choices=[(i18n("Full"), "Full"), (i18n("Cut Only"), "Cut Only"), (i18n("Subtitles Only"), "Subtitles Only")], label=i18n("Workflow"), value="Full")
                         face_model_input = gr.Dropdown(["insightface", "mediapipe"], label=i18n("Face Model"), value="insightface")
@@ -282,25 +323,31 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     input_source.change(on_source_change, inputs=input_source, outputs=[url_input, project_selector, workflow_input])
              
              with gr.Accordion(i18n("Advanced Face Settings"), open=False):
+                 face_preset_input = gr.Dropdown(choices=list(FACE_PRESETS.keys()), label=i18n("Configuration Presets"), value="Default (Balanced)", interactive=True)
                  with gr.Row():
                       face_filter_thresh_input = gr.Slider(label=i18n("Ignore Small Faces (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.35, step=0.05, info=i18n("Relative size to ignore background."))
                       face_two_thresh_input = gr.Slider(label=i18n("Threshold for 2 Faces (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.60, step=0.05, info=i18n("Size of 2nd face to activate split mode."))
-                      face_conf_thresh_input = gr.Slider(label=i18n("Minimum Confidence (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.70, step=0.05, info=i18n("Ignore detections with low confidence."))
+                      face_conf_thresh_input = gr.Slider(label=i18n("Minimum Confidence (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.40, step=0.05, info=i18n("Ignore detections with low confidence."))
                       face_dead_zone_input = gr.Slider(label=i18n("Dead Zone (Stabilization)"), minimum=0, maximum=200, value=150, step=5, info=i18n("Movement pixels to ignore."))
+                 
+                 face_preset_input.change(apply_face_preset, inputs=face_preset_input, outputs=[face_filter_thresh_input, face_two_thresh_input, face_conf_thresh_input, face_dead_zone_input])
 
                  with gr.Accordion(i18n("Experimental: Active Speaker & Motion"), open=False):
-                     focus_active_speaker_input = gr.Checkbox(label=i18n("Experimental: Focus on Speaker"), value=False, info=i18n("Tries to focus only on the speaking person instead of split screen."))
-                     with gr.Row():
-                          active_speaker_mar_input = gr.Slider(label=i18n("MAR Threshold (Mouth Open)"), minimum=0.01, maximum=0.20, value=0.03, step=0.005, info=i18n("Mouth open sensitivity."))
-                          active_speaker_score_diff_input = gr.Slider(label=i18n("Score Difference"), minimum=0.5, maximum=10.0, value=1.5, step=0.5, info=i18n("Minimum difference to focus on 1 face."))
-                          
-                     with gr.Row():
-                          include_motion_input = gr.Checkbox(label=i18n("Consider Motion"), value=False, info=i18n("Increases score with motion (gestures)."))
-                        
-                     with gr.Row():
-                          active_speaker_motion_threshold_input = gr.Slider(label=i18n("Motion Dead Zone"), minimum=0.0, maximum=20.0, value=3.0, step=0.5, info=i18n("Pixels ignored."))
-                          active_speaker_motion_sensitivity_input = gr.Slider(label=i18n("Motion Sensitivity"), minimum=0.01, maximum=0.5, value=0.05, step=0.01, info=i18n("Points per pixel."))
-                          active_speaker_decay_input = gr.Slider(label=i18n("Switch Speed"), minimum=0.5, maximum=5.0, value=2.0, step=0.5, info=i18n("Speed to lose focus."))
+                        experimental_preset_input = gr.Dropdown(choices=list(EXPERIMENTAL_PRESETS.keys()), label=i18n("Configuration Presets"), value="Default (Off)", interactive=True)
+                        focus_active_speaker_input = gr.Checkbox(label=i18n("Experimental: Focus on Speaker"), value=False, info=i18n("Tries to focus only on the speaking person instead of split screen."))
+                        with gr.Row():
+                            active_speaker_mar_input = gr.Slider(label=i18n("MAR Threshold (Mouth Open)"), minimum=0.01, maximum=0.20, value=0.03, step=0.005, info=i18n("Mouth open sensitivity."))
+                            active_speaker_score_diff_input = gr.Slider(label=i18n("Score Difference"), minimum=0.5, maximum=10.0, value=1.5, step=0.5, info=i18n("Minimum difference to focus on 1 face."))
+                            
+                        with gr.Row():
+                            include_motion_input = gr.Checkbox(label=i18n("Consider Motion"), value=False, info=i18n("Increases score with motion (gestures)."))
+                            
+                        with gr.Row():
+                            active_speaker_motion_threshold_input = gr.Slider(label=i18n("Motion Dead Zone"), minimum=0.0, maximum=20.0, value=3.0, step=0.5, info=i18n("Pixels ignored."))
+                            active_speaker_motion_sensitivity_input = gr.Slider(label=i18n("Motion Sensitivity"), minimum=0.01, maximum=0.5, value=0.05, step=0.01, info=i18n("Points per pixel."))
+                            active_speaker_decay_input = gr.Slider(label=i18n("Switch Speed"), minimum=0.5, maximum=5.0, value=2.0, step=0.5, info=i18n("Speed to lose focus."))
+
+                        experimental_preset_input.change(apply_experimental_preset, inputs=experimental_preset_input, outputs=[focus_active_speaker_input, active_speaker_mar_input, active_speaker_score_diff_input, include_motion_input, active_speaker_motion_threshold_input, active_speaker_motion_sensitivity_input, active_speaker_decay_input])
              with gr.Accordion(i18n("Subtitle Settings (alpha)"), open=False):
                 preset_input = gr.Dropdown(choices=[(i18n("Manual"), "Manual")] + [(k, k) for k in subs.SUBTITLE_PRESETS.keys()], label=i18n("Quick Presets"), value="Hormozi (Classic)")
                 use_custom_subs = gr.Checkbox(label=i18n("Enable Subtitle Customization (Includes Preset)"), value=True)
@@ -396,7 +443,8 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                  bold_input, italic_input, uppercase_input, vertical_pos_input, alignment_input,
                  # New Inputs
                  highlight_size_input, words_per_block_input, gap_limit_input, mode_input, 
-                 underline_input, strikeout_input, border_style_input, remove_punc_input
+                 underline_input, strikeout_input, border_style_input, remove_punc_input,
+                 video_quality_input, use_youtube_subs_input, translate_input
              ], outputs=[logs_output, start_btn, stop_btn, results_html])
 
 

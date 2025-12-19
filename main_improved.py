@@ -24,6 +24,7 @@ from scripts import (
     burn_subtitles,
     save_json,
     organize_output,
+    translate_json,
 )
 from i18n.i18n import I18nAuto
 
@@ -133,6 +134,9 @@ def main():
     parser.add_argument("--active-speaker-motion-sensitivity", type=float, default=0.05, help="Motion sensitivity multiplier (default: 0.05)")
     parser.add_argument("--active-speaker-decay", type=float, default=2.0, help="Activity score decay rate (default: 2.0)")
     parser.add_argument("--skip-prompts", action="store_true", help="Skip interactive prompts and use defaults/existing files")
+    parser.add_argument("--video-quality", choices=["best", "1080p", "720p", "480p"], default="best", help="Video download quality")
+    parser.add_argument("--skip-youtube-subs", action="store_true", help="Skip downloading YouTube subtitles")
+    parser.add_argument("--translate-target", help="Target language code for subtitle translation (e.g. 'pt', 'en').")
 
     args = parser.parse_args()
     
@@ -378,7 +382,8 @@ def main():
                 sys.exit(1)
                 
             print(i18n("Starting download..."))
-            download_result = download_video.download(url)
+            download_subs = not args.skip_youtube_subs
+            download_result = download_video.download(url, download_subs=download_subs, quality=args.video_quality)
             
             if isinstance(download_result, tuple):
                 input_video, project_folder = download_result
@@ -560,6 +565,16 @@ def main():
             # transcribe_cuts removido: JSON de legenda já é gerado no corte
             # transcribe_cuts.transcribe(project_folder=project_folder)
             
+            # --- Translation Integration ---
+            if args.translate_target and args.translate_target.lower() != "none":
+                 print(i18n("Translating subtitles to: {}").format(args.translate_target))
+                 import asyncio
+                 try:
+                    asyncio.run(translate_json.translate_project_subs(project_folder, args.translate_target))
+                 except Exception as e:
+                    print(i18n("Translation failed: {}").format(e))
+            # -------------------------------
+
             sub_config = get_subtitle_config(args.subtitle_config)
             
 
