@@ -198,30 +198,40 @@ def render_specific_video(json_full_path):
     video_candidate = os.path.join(video_folder, f"{base_name}.mp4")
     
     if not os.path.exists(video_candidate):
-        # Try finding one that starts with 'final-outputXXX' and stripping _processed?
-        # Actually 'cut_segments' makes 'temp_video_no_audio_X.mp4'.
-        # 'edit_video' processes it and saves where?
-        # edit_video.py: output_file = ... 
-        # Actually edit_video usually overwrites or saves as 'final-output...'.
-        # If 'burn_subtitles' works on ALL files, we can just search for the video file.
+        # Try stripping "_processed" (common suffix for subtitle files)
+        if base_name.endswith("_processed"):
+             clean_name = base_name.replace("_processed", "")
+             candidate_2 = os.path.join(video_folder, f"{clean_name}.mp4")
+             if os.path.exists(candidate_2):
+                 video_candidate = candidate_2
         
-        # Fallback: Search for any video file in 'final' that matches the ID.
-        match = re.search(r"output(\d+)", base_name)
-        if match:
-            vid_id = match.group(1)
-            # Look for *output{vid_id}*.mp4
-            files = os.listdir(video_folder)
-            found = None
-            for f in files:
-                if f"output{vid_id}" in f and f.endswith(".mp4") and "subtitled" not in f:
-                     found = os.path.join(video_folder, f)
-                     break
-            if found:
-                video_candidate = found
+        # If still not found, try regex strategies
+        if not os.path.exists(video_candidate):
+            # Strategy A: 'output123' pattern
+            match = re.search(r"output(\d+)", base_name)
+            
+            # Strategy B: '000_Name' pattern (digits at start)
+            if not match:
+                match = re.search(r"^(\d+)_", base_name)
+            
+            if match:
+                vid_id = match.group(1)
+                # Look for file containing this ID
+                files = os.listdir(video_folder)
+                found = None
+                for f in files:
+                    # Match ID in filename (either outputID or ID_Name)
+                    # We check if 'output{vid_id}' or '{vid_id}_' is in the file
+                    # Be careful not to match '100' with '00'
+                    if (f"output{vid_id}" in f or f.startswith(f"{vid_id}_")) and f.endswith(".mp4") and "subtitled" not in f:
+                         found = os.path.join(video_folder, f)
+                         break
+                if found:
+                    video_candidate = found
+                else:
+                    return f"Error: Could not find video file for ID {vid_id} (from {base_name}) in {video_folder}"
             else:
-                return f"Error: Could not find video file for {base_name} in {video_folder}"
-        else:
-             return f"Error: Could not determine video ID from {base_name}"
+                 return f"Error: Could not determine video ID from {base_name}"
     
     # Output path
     burned_folder = os.path.join(project_folder, "burned_sub")
