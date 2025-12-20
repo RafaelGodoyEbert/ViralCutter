@@ -483,7 +483,17 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                  start_btn = gr.Button(i18n("Start Processing"), variant="primary")
                  stop_btn = gr.Button(i18n("Stop"), variant="stop", visible=False)
              stop_btn.click(kill_process, outputs=[])
-             logs_output = gr.Textbox(label=i18n("Logs"), lines=10, autoscroll=True)
+             logs_output = gr.Textbox(label=i18n("Logs"), lines=10, autoscroll=True, elem_id="logs_output")
+             
+             # Force scroll to bottom via JS
+             logs_output.change(fn=None, inputs=[], outputs=[], js="""
+                function() {
+                    var ta = document.querySelector('#logs_output textarea');
+                    if(ta) {
+                        ta.scrollTop = ta.scrollHeight;
+                    }
+                }
+             """)
              results_html = gr.HTML(label=i18n("Results"))
              
              # MUST pass all all new inputs to the run function
@@ -701,24 +711,33 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.colab:
-        print("Running in Colab mode. Generating public link...")
-        library.set_url_mode("gradio")
+        print("Running in Colab mode. Generating public link with Static Mounts...")
+        library.set_url_mode("fastapi")
         
-        # Broaden allowed paths for Colab to avoid permission issues
-        allowed_dirs = [VIRALS_DIR, WORKING_DIR]
+        # Broaden allowed paths for Colab
+        allowed_dirs = [VIRALS_DIR, WORKING_DIR, os.getcwd(), "."]
         
-        # Explicitly set static paths for newer Gradio versions
+        # Explicitly set static paths
         try:
             gr.set_static_paths(paths=allowed_dirs)
             print(f"DEBUG: Registered static paths: {allowed_dirs}")
         except AttributeError:
-            print("DEBUG: gr.set_static_paths not available (older Gradio version?)")
+            print("DEBUG: gr.set_static_paths not available")
         
         print(f"DEBUG: Allowed paths for Gradio: {allowed_dirs}")
         
-        # In Colab/Gradio mode, we launch the blocks directly with share=True
-        # allowed_paths is needed to serve files via /file/ mechanism
-        demo.queue().launch(share=True, allowed_paths=allowed_dirs)
+        # Launch with prevent_thread_lock to allow mounting
+        app, local_url, share_url = demo.queue().launch(
+            share=True, 
+            allowed_paths=allowed_dirs,
+            prevent_thread_lock=True
+        )
+        
+        # Mount the VIRALS directory explicitly
+        app.mount("/virals", StaticFiles(directory=VIRALS_DIR), name="virals")
+        print(f"Mounted /virals to {VIRALS_DIR}")
+        
+        demo.block_thread()
     else:
         print("Running in Local mode with Share enabled (Mounting StaticFiles).")
         library.set_url_mode("fastapi")
@@ -734,7 +753,7 @@ if __name__ == "__main__":
         # Launch with prevent_thread_lock=True so we can mount routes afterwards
         # This returns the FastAPI app instance
         app, local_url, share_url = demo.queue().launch(
-            share=True, 
+            share=False, 
             allowed_paths=allowed_dirs, 
             inbrowser=True,
             server_name="0.0.0.0",
