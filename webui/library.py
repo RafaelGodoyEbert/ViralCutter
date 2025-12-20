@@ -125,28 +125,34 @@ def generate_project_gallery(project_path_name, is_full_path=False):
                     
                     if URL_MODE == "gradio":
                          # Gradio Launch Mode
-                         # Strategy: STRICT RELATIVE PATH
-                         # With gr.set_static_paths in place, standard /file/relative should work.
-                         
-                         cwd = os.getcwd()
-                         norm_path = os.path.normpath(abs_video).replace("\\", "/")
+                         # Strategy: SMART PATH (Relative preferred, Absolute fallback)
                          
                          try:
-                             rel_path = os.path.relpath(norm_path, cwd).replace("\\", "/")
-                         except:
-                             rel_path = norm_path
+                             cwd = os.getcwd()
+                             abs_video_path = os.path.abspath(video_path)
+                             
+                             # Try relative path first
+                             rel_path = os.path.relpath(abs_video_path, cwd)
+                             
+                             if not rel_path.startswith(".."):
+                                 # Inside CWD, use relative
+                                 final_path = rel_path.replace("\\", "/")
+                                 # Debug
+                                 print(f"DEBUG: URL Generation (Relative): {final_path}")
+                             else:
+                                 # Outside CWD, use absolute
+                                 final_path = abs_video_path.replace("\\", "/")
+                                 print(f"DEBUG: URL Generation (Absolute fallback): {final_path}")
+
+                             # Encode
+                             path_encoded = urllib.parse.quote(final_path, safe="/:")
+                             video_src = f"/file/{path_encoded}"
+                             
+                         except Exception as e:
+                             print(f"DEBUG: Error pathing: {e}")
+                             video_src = ""
                          
-                         rel_path_clean = rel_path.lstrip("/")
-                         path_encoded = urllib.parse.quote(rel_path_clean, safe="/:")
-                         video_src = f"/file/{path_encoded}"
-                         
-                         # Debug Logging
-                         print(f"DEBUG: URL Generation (Strict Relative)")
-                         print(f"DEBUG:   CWD: {cwd}")
-                         print(f"DEBUG:   Rel Path: {rel_path_clean}")
-                         print(f"DEBUG:   Result: {video_src}")
-                         
-                         if os.path.exists(norm_path):
+                         if os.path.exists(abs_video):
                              print(f"DEBUG:   File Exists.")
                          else:
                              print(f"DEBUG:   File NOT FOUND.")

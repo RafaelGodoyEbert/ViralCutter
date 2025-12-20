@@ -1,5 +1,11 @@
 # Changelog
 
+## Suporte a GGUF e Ajustes de Link
+
+### Novidades
+- **Suporte a GGUF**: colocado suporte a gguf para llm local.
+- **Link Público**: ajustado diretórios de link público.
+
 ## Melhorias de Qualidade de Vídeo, Legendas e Processamento
 
 ### Novidades

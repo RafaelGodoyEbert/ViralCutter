@@ -110,7 +110,7 @@ def main():
     parser.add_argument("--max-duration", type=int, default=90, help="Maximum segment duration (seconds)")
     parser.add_argument("--model", default="large-v3-turbo", help="Whisper model to use")
     
-    parser.add_argument("--ai-backend", choices=["manual", "gemini", "g4f"], help="AI backend for viral analysis")
+    parser.add_argument("--ai-backend", choices=["manual", "gemini", "g4f", "local"], help="AI backend for viral analysis")
     parser.add_argument("--api-key", help="Gemini API Key (required if ai-backend is gemini)")
     
     parser.add_argument("--chunk-size", help="Override Chunk Size")
@@ -309,13 +309,43 @@ def main():
                 print("\n" + i18n("Select AI Backend for Viral Analysis:"))
                 print(i18n("1. Gemini API (Best / Recommended)"))
                 print(i18n("2. G4F (Free / Experimental)"))
-                print(i18n("3. Manual (Copy/Paste Prompt)"))
-                choice = input(i18n("Choose (1/2/3): ")).strip()
+                print(i18n("3. Local (GGUF via llama.cpp)"))
+                print(i18n("4. Manual (Copy/Paste Prompt)"))
+                choice = input(i18n("Choose (1-4): ")).strip()
                 
                 if choice == "1":
                     ai_backend = "gemini"
                 elif choice == "2":
                     ai_backend = "g4f"
+                elif choice == "3":
+                    ai_backend = "local"
+                    # Interactive model selection for local
+                    # List models
+                    models_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")
+                    if not os.path.exists(models_dir): os.makedirs(models_dir)
+                    models = [f for f in os.listdir(models_dir) if f.endswith(".gguf")]
+                    
+                    if not models:
+                        print(i18n("\nNo .gguf models found in 'models' directory."))
+                        print(i18n("Please place a module file in: {}").format(models_dir))
+                        print(i18n("Falling back to Manual..."))
+                        ai_backend = "manual"
+                    else:
+                        print(i18n("\nAvailable Models:"))
+                        for idx, m in enumerate(models):
+                            print(f"{idx+1}. {m}")
+                        
+                        try:
+                            m_idx = int(input(i18n("Select Model (Number): "))) - 1
+                            if 0 <= m_idx < len(models):
+                                args.ai_model_name = models[m_idx] # Set global arg
+                            else:
+                                print("Invalid selection. Using first model.")
+                                args.ai_model_name = models[0]
+                        except:
+                             print("Invalid input. Using first model.")
+                             args.ai_model_name = models[0]
+                             
                 else:
                     ai_backend = "manual"
 
@@ -450,7 +480,10 @@ def main():
                     )
                 
                 if not viral_segments or not viral_segments.get("segments"):
-                    print("Aviso: Nenhum segmento viral foi gerado. Verifique a resposta da IA.")
+                    print(i18n("Error: No viral segments were generated."))
+                    print(i18n("Possible reasons: API error, Model not found, or empty response."))
+                    print(i18n("Stopping execution."))
+                    sys.exit(1)
                 
                 save_json.save_viral_segments(viral_segments, project_folder=project_folder) 
 
@@ -580,9 +613,16 @@ def main():
 
             
             # Passa o dicionário desempacotado como argumentos, mais o project_folder
-            adjust_subtitles.adjust(project_folder=project_folder, **sub_config)
-            
-            burn_subtitles.burn(project_folder=project_folder)
+            try:
+                adjust_subtitles.adjust(project_folder=project_folder, **sub_config)
+                burn_subtitles.burn(project_folder=project_folder)
+            except FileNotFoundError as fnf_error:
+                print(i18n("\n[ERROR] Subtitle processing failed: {}").format(str(fnf_error)))
+                print(i18n("Tip: If you are using Workflow 3 (Subtitles Only), ensure the 'subs' folder exists and contains valid JSON files."))
+                sys.exit(1)
+            except Exception as e:
+                print(i18n("\n[ERROR] Unexpected error during subtitle processing: {}").format(str(e)))
+                raise e
         else:
             print(i18n("Subtitle burning skipped."))
 

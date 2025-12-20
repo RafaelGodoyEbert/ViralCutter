@@ -11,29 +11,38 @@ try:
 except ImportError:
     HAS_GEMINI = False
 
-try:
-    import g4f
-    HAS_G4F = True
 except ImportError:
     HAS_G4F = False
+
+try:
+    from llama_cpp import Llama
+    HAS_LLAMA_CPP = True
+except ImportError:
+    HAS_LLAMA_CPP = False
 
 def clean_json_response(response_text):
     """Limpa blocos de código markdown do texto de resposta."""
     if not response_text:
         return {"segments": []}
     # Remove ```json ... ```
+    # First, try to remove ```json ... ``` or just ``` ... ```
     pattern = r"```json(.*?)```"
     match = re.search(pattern, response_text, re.DOTALL)
     if match:
         response_text = match.group(1)
-    elif "```" in response_text:
-         response_text = response_text.replace("```", "")
     else:
-        # Fallback: Try to find the first { and last }
-        start_idx = response_text.find("{")
-        end_idx = response_text.rfind("}")
-        if start_idx != -1 and end_idx != -1:
-            response_text = response_text[start_idx : end_idx + 1]
+        pattern_generic = r"```(.*?)```"
+        match_generic = re.search(pattern_generic, response_text, re.DOTALL)
+        if match_generic:
+            response_text = match_generic.group(1)
+            
+    # Always attempt to extract from outermost curly braces, 
+    # as some models chatter before/after the code block
+    start_idx = response_text.find("{")
+    end_idx = response_text.rfind("}")
+    
+    if start_idx != -1 and end_idx != -1:
+         response_text = response_text[start_idx : end_idx + 1]
     
     return json.loads(response_text.strip())
 
@@ -228,6 +237,12 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
         cfg_model = config["g4f"].get("model", "gpt-4o-mini")
         model_name = model_name_arg if model_name_arg else cfg_model
 
+    elif ai_mode == "local":
+        # For local, chunk size default 3000 chars roughly matches 1024-2048 tokens depending on chars/token
+        current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else 3000
+        # Model name is just the argument (filename)
+        model_name = model_name_arg if model_name_arg else ""
+
     system_prompt_template = ""
     if os.path.exists(prompt_path):
         with open(prompt_path, 'r', encoding='utf-8') as f:
@@ -364,6 +379,36 @@ OUTPUT JSON ONLY:
 
     print(f"Processando {len(output_texts)} chunks usando modo: {ai_mode.upper()}")
 
+    # Initialize Local Model if needed (Once)
+    local_llm_instance = None
+    if ai_mode == "local":
+        if not HAS_LLAMA_CPP:
+            print("Error: llama-cpp-python not installed. Please install it to use Local mode.")
+            return {"segments": []}
+            
+        models_dir = os.path.join(base_dir, 'models')
+        # Check if model_name is full path or filename
+        model_path = os.path.join(models_dir, model_name)
+        if not os.path.exists(model_path):
+             if os.path.exists(model_name): # Absolute path check
+                 model_path = model_name
+             else:
+                 print(f"Error: Model not found at {model_path}")
+                 return {"segments": []}
+        
+        print(f"[INFO] Loading Local Model: {os.path.basename(model_path)} (This may take a while)...")
+        try:
+            # Adjust n_gpu_layers=-1 for max GPU usage. n_ctx=8192 for long context.
+            local_llm_instance = Llama(
+                model_path=model_path,
+                n_gpu_layers=-1, 
+                n_ctx=8192,
+                verbose=False
+            )
+        except Exception as e:
+            print(f"Failed to load model: {e}")
+            return {"segments": []}
+
     for i, prompt in enumerate(output_texts):
         response_text = ""
         
@@ -417,6 +462,33 @@ OUTPUT JSON ONLY:
         elif ai_mode == "g4f":
             print(f"Enviando chunk {i+1} para o G4F (Model: {model_name})...")
             response_text = call_g4f(prompt, model_name=model_name)
+            
+        elif ai_mode == "local" and local_llm_instance:
+            print(f"Processing chunk {i+1} with Local LLM...")
+            try:
+                # Use chat completion for better formatting handling
+                output = local_llm_instance.create_chat_completion(
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant that outputs only JSON."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=4096,
+                    temperature=0.7
+                )
+                response_text = output['choices'][0]['message']['content']
+            except Exception as e:
+                print(f"Error evaluating local model: {e}")
+                response_text = "{}"
+
+        # --- Save RAW Response for Debugging ---
+        try:
+            raw_response_path = os.path.join(project_folder, f"response_raw_part_{i+1}.txt")
+            with open(raw_response_path, "w", encoding="utf-8") as f:
+                f.write(response_text)
+            print(f"[DEBUG] Raw response saved to: {raw_response_path}")
+        except Exception as e:
+            print(f"[WARN] Failed to save raw response: {e}")
+        # ----------------------------------------
 
         # Processar resposta
         try:

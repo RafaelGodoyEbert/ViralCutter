@@ -241,6 +241,11 @@ def adjust(base_color, base_size, highlight_size, highlight_color, words_per_blo
             print(f"Could not load face modes: {e}")
 
     # Process all JSON files in input directory
+    # Process all JSON files in input directory
+    if not os.path.exists(input_dir):
+        print(f"[ERROR] Subtitle folder missing: {input_dir}")
+        raise FileNotFoundError(f"Subtitle folder missing at {input_dir}. Ensure transcription completed successfully.")
+
     for filename in os.listdir(input_dir):
         if filename.endswith(".json"):
             input_path = os.path.join(input_dir, filename)

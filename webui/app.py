@@ -42,10 +42,13 @@ EXPERIMENTAL_PRESETS = {
 # ---------------------------
 
 VIRALS_DIR = os.path.join(WORKING_DIR, "VIRALS")
+MODELS_DIR = os.path.join(WORKING_DIR, "models")
 
-# Ensure VIRALS dir exists
+# Ensure directories exist
 if not os.path.exists(VIRALS_DIR):
     os.makedirs(VIRALS_DIR, exist_ok=True)
+if not os.path.exists(MODELS_DIR):
+    os.makedirs(MODELS_DIR, exist_ok=True)
 
 # Global variables
 current_process = None
@@ -88,19 +91,26 @@ GEMINI_MODELS = [
 ]
 
 G4F_MODELS = [
+    'gpt-4o',
     'gpt-4o-mini',
-    'gpt-4'
+    'gpt-4',
+    'o1-mini',
+    'o1',
+    'deepseek-r1',
+    'deepseek-v3',
+    'llama-3.3-70b',
+    'llama-3.1-405b',
+    'claude-3.5-sonnet',
+    'claude-3.7-sonnet',
+    'gemini-2.0-flash',
+    'qwen-2.5-72b'
 ]
 
+def get_local_models():
+    if not os.path.exists(MODELS_DIR): return []
+    return [f for f in os.listdir(MODELS_DIR) if f.endswith(".gguf")]
 
-def update_ai_settings(backend):
-    if backend == "gemini":
-        return gr.update(choices=GEMINI_MODELS, value=GEMINI_MODELS[1], visible=True), gr.update(value=20000, visible=True)
-    elif backend == "g4f":
-        return gr.update(choices=G4F_MODELS, value=G4F_MODELS[0], visible=True), gr.update(value=2000, visible=True)
-    else:
-        # Manual
-        return gr.update(visible=False), gr.update(visible=False)
+
 
 def apply_face_preset(preset_name):
     if preset_name not in FACE_PRESETS:
@@ -250,19 +260,27 @@ body, .gradio-container {
     color: #ffffff !important;
 }
 
+/* Force dark background for specific inputs that might be white */
+input[type="password"], textarea, select {
+    background-color: #1f1f1f !important;
+    color: #ffffff !important;
+    border: 1px solid #333 !important;
+}
+
 /* Hide Footer */
 footer {visibility: hidden}
 
 /* Container Width */
 .gradio-container {
     max-width: 98% !important; 
-    margin: 0 auto;
+    width: 98% !important;
+    margin: 0 auto !important;
 }
 """
 
 import header
 
-with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_hue="blue", neutral_hue="slate"), css=css) as demo:
+with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_hue="orange", neutral_hue="slate"), css=css) as demo:
     gr.Markdown(header.badges)
     gr.Markdown(header.description)
     with gr.Tabs():
@@ -281,7 +299,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     project_selector = gr.Dropdown(choices=[], label=i18n("Select Project"), visible=False)
                     
                     def on_source_change(source):
-                        if source == i18n("YouTube URL"):
+                        if source == "YouTube URL":
                             return gr.update(visible=True), gr.update(visible=False), gr.update(value="Full") # Reset to Full if URL is picked? Optional.
                         else:
                             # Load projects
@@ -299,16 +317,55 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         max_dur_input = gr.Number(label=i18n("Max Duration (s)"), value=90)
                 with gr.Column(scale=1):
                     with gr.Row():
-                        ai_backend_input = gr.Dropdown(choices=[(i18n("Gemini"), "gemini"), (i18n("G4F"), "g4f"), (i18n("Manual"), "manual")], label=i18n("AI Backend"), value="gemini")
-                        api_key_input = gr.Textbox(label=i18n("Gemini API Key"), type="password")
+                        ai_backend_input = gr.Dropdown(choices=[(i18n("Gemini"), "gemini"), (i18n("G4F"), "g4f"), (i18n("Local (GGUF)"), "local"), (i18n("Manual"), "manual")], label=i18n("AI Backend"), value="gemini", scale=2)
+                        api_key_input = gr.Textbox(label=i18n("Gemini API Key"), type="password", scale=3)
                     
                     # New Dynamic Inputs
                     with gr.Row():
-                        ai_model_input = gr.Dropdown(choices=GEMINI_MODELS, label=i18n("AI Model"), value=GEMINI_MODELS[1], allow_custom_value=True)
-                        chunk_size_input = gr.Number(label=i18n("Chunk Size"), value=20000, precision=0)
+                        ai_model_input = gr.Dropdown(choices=GEMINI_MODELS, label=i18n("AI Model"), value=GEMINI_MODELS[1], allow_custom_value=True, visible=True, scale=5)
+                        refresh_models_btn = gr.Button("🔄", size="sm", visible=False, scale=0, min_width=50) # Only local
+                        chunk_size_input = gr.Number(label=i18n("Chunk Size"), value=20000, precision=0, scale=2)
                     
-                    # Update logic
-                    ai_backend_input.change(update_ai_settings, inputs=ai_backend_input, outputs=[ai_model_input, chunk_size_input])
+                    # Update listeners with logic to hide/show API key
+                    def update_ai_ui(backend):
+                        show_api = (backend == "gemini")
+                        show_refresh = (backend == "local")
+                        
+                        # Definições padrão para evitar que fiquem vazios
+                        new_choices = []
+                        new_val = ""
+                        new_chunk = 20000
+                        
+                        if backend == "gemini":
+                            new_choices = GEMINI_MODELS
+                            new_val = GEMINI_MODELS[1]
+                            new_chunk = 20000
+                        elif backend == "g4f":
+                            new_choices = G4F_MODELS
+                            new_val = G4F_MODELS[0]
+                            new_chunk = 3000
+                        elif backend == "local":
+                            models = get_local_models()
+                            new_choices = models if models else ["No models found"]
+                            new_val = new_choices[0]
+                            new_chunk = 3000
+                        else: # Manual
+                             pass
+
+                        return (
+                            gr.update(visible=show_api), # API Key Visibility (Fixes hole 1)
+                            gr.update(choices=new_choices, value=new_val, visible=(backend != "manual")), # Model Dropdown
+                            gr.update(visible=show_refresh), # Refresh Button
+                            gr.update(value=new_chunk) # Chunk Size
+                        )
+
+                    def refresh_local_models():
+                        models = get_local_models()
+                        val = models[0] if models else "No models found"
+                        return gr.update(choices=models, value=val)
+
+                    refresh_models_btn.click(refresh_local_models, outputs=ai_model_input)
+                    ai_backend_input.change(update_ai_ui, inputs=ai_backend_input, outputs=[api_key_input, ai_model_input, refresh_models_btn, chunk_size_input])
 
                     model_input = gr.Dropdown(["tiny", "small", "medium", "large", "large-v1", "large-v2", "large-v3", "turbo", "large-v3-turbo", "distil-large-v2", "distil-medium.en", "distil-small.en", "distil-large-v3"], label=i18n("Whisper Model"), value="large-v3-turbo")
                     with gr.Row():
@@ -663,25 +720,33 @@ if __name__ == "__main__":
         # allowed_paths is needed to serve files via /file/ mechanism
         demo.queue().launch(share=True, allowed_paths=allowed_dirs)
     else:
-        def open_browser():
-            time.sleep(1.5) # Slight delay to ensure server finds port
-            webbrowser.open("http://localhost:7860")
+        print("Running in Local mode with Share enabled (Mounting StaticFiles).")
+        library.set_url_mode("fastapi")
+        
+        # Broaden allowed paths (good practice even if using mount)
+        allowed_dirs = [VIRALS_DIR, WORKING_DIR, os.getcwd(), "."]
 
-        # Create FastAPI app and mount both StaticFiles and Gradio
-        fast_app = FastAPI()
-        fast_app.mount("/virals", StaticFiles(directory=VIRALS_DIR), name="virals")
-        
-        # Mount Gradio app
-        # Note: 'demo' here refers to the gr.Blocks object defined above
-        app = gr.mount_gradio_app(fast_app, demo, path="/")
-        
-        print("Starting ViralCutter WebUI...")
-        threading.Thread(target=open_browser, daemon=True).start()
-        
-        # Run server
         try:
-            uvicorn.run(app, host="0.0.0.0", port=7860)
-        except Exception as e:
-            print(f"Error starting server: {e}")
-            input("Press Enter to close...")
+            gr.set_static_paths(paths=allowed_dirs)
+        except AttributeError:
+            pass
+            
+        # Launch with prevent_thread_lock=True so we can mount routes afterwards
+        # This returns the FastAPI app instance
+        app, local_url, share_url = demo.queue().launch(
+            share=True, 
+            allowed_paths=allowed_dirs, 
+            inbrowser=True,
+            server_name="0.0.0.0",
+            server_port=7860,
+            prevent_thread_lock=True
+        )
+        
+        # Mount the VIRALS directory to /virals using standard FastAPI StaticFiles
+        # This is more robust than Gradio's internal file serving for this use case
+        app.mount("/virals", StaticFiles(directory=VIRALS_DIR), name="virals")
+        print(f"Mounted /virals to {VIRALS_DIR}")
+        
+        # Keep the script running
+        demo.block_thread()
 
