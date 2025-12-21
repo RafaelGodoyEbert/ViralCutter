@@ -304,6 +304,7 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
                 current_faces = last_detected_faces
             else:
                 result = resize_with_padding(frame)
+                coordinate_log.append({"frame": frame_index, "faces": []})
                 out.write(result)
                 continue
 
@@ -444,6 +445,8 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
     # Using mp4v for container, but final mux will fix encoding
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
@@ -476,6 +479,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     timeline_frames = [] # Store mode for *every written frame* or at least detection points
     
     timeline_frames = [] # Store mode for *every written frame* or at least detection points
+    coordinate_log = [] # Store raw face coordinates frame-by-frame
     
     # For Active Speaker Logic
     # Map of "Face ID" to activity score?
@@ -923,6 +927,34 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
              result = crop_and_resize_insightface(frame, current_faces[0])
              timeline_frames.append((frame_index, "1"))
              
+        # Capture Coordinates (Frame-by-Frame)
+        coords_entry = {"frame": frame_index, "src_size": [frame_width, frame_height], "faces": []}
+        try:
+            # We want to store [x1, y1, x2, y2, rh] for each face
+            if isinstance(current_faces, (list, tuple)):
+                processed_faces_log = []
+                for f in current_faces:
+                    f_list = list(map(int, f[:4])) # Standard bbox
+                    # Calculate rh (relative height)
+                    face_h = f_list[3] - f_list[1]
+                    rh = face_h / float(frame_height)
+                    f_list.append(float(f"{rh:.4f}")) # Append as 5th element
+                    processed_faces_log.append(f_list)
+                coords_entry["faces"] = processed_faces_log
+                
+            elif isinstance(current_faces, np.ndarray):
+                # Similar logic for numpy
+                processed_faces_log = []
+                for f in current_faces:
+                    f_list = f[:4].astype(int).tolist()
+                    face_h = f_list[3] - f_list[1]
+                    rh = face_h / float(frame_height)
+                    f_list.append(float(f"{rh:.4f}"))
+                    processed_faces_log.append(f_list)
+                coords_entry["faces"] = processed_faces_log
+        except: pass
+        coordinate_log.append(coords_entry)
+
         out.write(result)
 
     cap.release()
@@ -967,6 +999,15 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
         print(f"Timeline saved: {timeline_file}")
     except Exception as e:
         print(f"Error saving timeline: {e}")
+
+    # Save Coords JSON
+    coords_file = output_file.replace(".mp4", "_coords.json")
+    try:
+        with open(coords_file, "w") as f:
+            json.dump(coordinate_log, f)
+        print(f"Face Coordinates saved: {coords_file}")
+    except Exception as e:
+        print(f"Error saving coords: {e}")
 
     finalize_video(input_file, output_file, index, fps, project_folder, final_folder)
     
@@ -1165,6 +1206,18 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
                          if os.path.exists(new_timeline_path): os.remove(new_timeline_path)
                          os.rename(old_timeline_path, new_timeline_path)
                          print(f"Renamed Timeline to Title: {new_timeline_name}")
+                         
+                     # 4. Rename Coords JSON
+                     old_coords_name = f"temp_video_no_audio_{index}_coords.json"
+                     old_coords_path = os.path.join(final_folder, old_coords_name)
+                     
+                     new_coords_name = f"{base_name_final}_coords.json"
+                     new_coords_path = os.path.join(final_folder, new_coords_name)
+                     
+                     if os.path.exists(old_coords_path):
+                         if os.path.exists(new_coords_path): os.remove(new_coords_path)
+                         os.rename(old_coords_path, new_coords_path)
+                         print(f"Renamed Coords to Title: {new_coords_name}")
                          
              except Exception as e:
                  print(f"Warning: Could not rename file with title: {e}") 

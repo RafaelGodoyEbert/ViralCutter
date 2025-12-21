@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-import uvicorn
+
 import re
 import library # Module for Library Logic
 import subtitle_handler as subs # Module for Subtitles
@@ -225,23 +225,43 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
     
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-    current_process = subprocess.Popen(cmd, cwd=WORKING_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True, env=env)
-    logs = ""
-    project_folder_path = None
-    if input_source == "Existing Project" and project_name:
-         # If using existing project, we already know the path, but let's see if logs confirm it
-         project_folder_path = os.path.join(VIRALS_DIR, project_name)
+    try:
+        current_process = subprocess.Popen(cmd, cwd=WORKING_DIR, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True, env=env)
+        logs = ""
+        project_folder_path = None
+        if input_source == "Existing Project" and project_name:
+             # If using existing project, we already know the path, but let's see if logs confirm it
+             project_folder_path = os.path.join(VIRALS_DIR, project_name)
 
-    for line in current_process.stdout:
-        logs += line
-        if "Project Folder:" in line:
-            parts = line.split("Project Folder:")
-            if len(parts) > 1: project_folder_path = parts[1].strip()
+        while True:
+            line = current_process.stdout.readline()
+            if not line and current_process.poll() is not None:
+                break
+            
+            if line:
+                logs += line
+                if "Project Folder:" in line:
+                    parts = line.split("Project Folder:")
+                    if len(parts) > 1: project_folder_path = parts[1].strip()
+                yield logs, gr.update(visible=True, interactive=False), gr.update(visible=True), None
+    except Exception as e:
+        logs += f"\nError running process: {str(e)}\n"
         yield logs, gr.update(visible=True, interactive=False), gr.update(visible=True), None
-    
-    if current_process:
-        current_process.wait()
-    current_process = None
+    finally:
+        if current_process:
+            if current_process.stdout:
+                try:
+                    current_process.stdout.close()
+                except Exception: pass
+            if current_process.poll() is None:
+                # If we are here, it means we finished reading or errored out, but process is still running.
+                # If it was a normal break from loop, process should be done or close to done.
+                # If we are stopping, current_process.terminate() might be needed outside? 
+                # But here we just wait.
+                try:
+                    current_process.wait()
+                except Exception: pass
+            current_process = None
     
     # Wait to ensure filesystem flush
     time.sleep(1.0)
@@ -348,7 +368,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                             models = get_local_models()
                             new_choices = models if models else ["No models found"]
                             new_val = new_choices[0]
-                            new_chunk = 3000
+                            new_chunk = 15000
                         else: # Manual
                              pass
 
@@ -697,6 +717,8 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                 <br>
                 {i18n('Apoie o projeto, qualquer valor é bem-vindo:')} 
                 <a href='https://nubank.com.br/pagar/1ls6a4/0QpSSbWBSq' target='_blank'><strong>{i18n('Apoiar via PIX')}</strong></a>
+                <br>
+                {i18n('100% local • open source • sem assinatura')} 
             </p>
         </div>
         """)
@@ -739,33 +761,59 @@ if __name__ == "__main__":
         
         demo.block_thread()
     else:
-        print("Running in Local mode with Share enabled (Mounting StaticFiles).")
-        library.set_url_mode("fastapi")
+        # Check environment
+        is_windows = (os.name == 'nt')
         
-        # Broaden allowed paths (good practice even if using mount)
+        library.set_url_mode("fastapi")
         allowed_dirs = [VIRALS_DIR, WORKING_DIR, os.getcwd(), "."]
-
         try:
             gr.set_static_paths(paths=allowed_dirs)
-        except AttributeError:
-            pass
-            
-        # Launch with prevent_thread_lock=True so we can mount routes afterwards
-        # This returns the FastAPI app instance
-        app, local_url, share_url = demo.queue().launch(
-            share=False, 
-            allowed_paths=allowed_dirs, 
-            inbrowser=True,
-            server_name="0.0.0.0",
-            server_port=7860,
-            prevent_thread_lock=True
-        )
+        except AttributeError: pass
         
-        # Mount the VIRALS directory to /virals using standard FastAPI StaticFiles
-        # This is more robust than Gradio's internal file serving for this use case
-        app.mount("/virals", StaticFiles(directory=VIRALS_DIR), name="virals")
-        print(f"Mounted /virals to {VIRALS_DIR}")
-        
-        # Keep the script running
-        demo.block_thread()
+        from fastapi.responses import FileResponse
+        from fastapi import BackgroundTasks
 
+        # Helper to attach routes to any FastAPI app (whether created by Gradio or us)
+        def attach_extra_routes(fastapi_app):
+            fastapi_app.mount("/virals", StaticFiles(directory=VIRALS_DIR), name="virals")
+            
+            @fastapi_app.get("/export_xml_api")
+            def export_xml_api(project: str, segment: int, background_tasks: BackgroundTasks, format: str = "premiere"):
+                try:
+                    project_path = os.path.join(VIRALS_DIR, project)
+                    script_path = os.path.join(WORKING_DIR, "scripts", "export_xml.py")
+                    cmd = [sys.executable, script_path, "--project", project_path, "--segment", str(segment), "--format", format]
+                    subprocess.run(cmd, check=True)
+                    proj_name = os.path.basename(project_path)
+                    zip_filename = f"export_{proj_name}_seg{segment}.zip"
+                    file_path = os.path.join(project_path, zip_filename)
+                    if os.path.exists(file_path):
+                        return FileResponse(file_path, filename=zip_filename, media_type='application/zip')
+                    else:
+                        return {"error": f"File generation failed. Expected: {file_path}"}
+                except Exception as e:
+                    return {"error": str(e)}
+            
+            print(f"Mounted /virals to {VIRALS_DIR}")
+
+        if is_windows:
+            print("Running in Windows environment (using Gradio launch for convenience).")
+            # Windows: Use demo.launch() for convenience (auto-browser, etc)
+            app, local_url, share_url = demo.queue().launch(
+                share=False, 
+                allowed_paths=allowed_dirs, 
+                inbrowser=True,
+                server_name="0.0.0.0",
+                server_port=7860,
+                prevent_thread_lock=True
+            )
+            attach_extra_routes(app)
+            demo.block_thread()
+        else:
+            print("Running in Linux/Container environment (using Uvicorn for stability).")
+            # Linux/HF: Use Uvicorn for explicit loop control
+            app = FastAPI()
+            attach_extra_routes(app)
+            # Disable SSR to prevent Node proxying issues on HF Spaces
+            app = gr.mount_gradio_app(app, demo.queue(), path="/", allowed_paths=allowed_dirs, ssr_mode=False)
+            uvicorn.run(app, host="0.0.0.0", port=7860)

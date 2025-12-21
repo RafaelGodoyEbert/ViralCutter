@@ -113,6 +113,7 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
         'skip_download': False,
         'quiet': False,
         'no_warnings': False,
+        'force_ipv4': True,
     }
     
 

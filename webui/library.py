@@ -189,7 +189,28 @@ def generate_project_gallery(project_path_name, is_full_path=False):
                             </video>
                             """
                             
+                            
                             download_link = f'<a href="{video_src}" download="{os.path.basename(video_path)}" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="Download" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>'
+                            
+                            # Export XML Link
+                            # project_path_name might be full path or folder name
+                            proj_name_api = os.path.basename(project_path_name)
+                            
+                            def make_export_btn(fmt, label, color_hover, svg_path):
+                                src = f"/export_xml_api?project={proj_name_api}&segment={i}&format={fmt}"
+                                return f'<a href="{src}" target="_blank" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="{label}" onmouseover="this.style.color=\'{color_hover}\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{svg_path}</svg></a>'
+
+                            # Premiere (Pr)
+                            export_pr = make_export_btn("premiere", "Export Premiere XML (Split Screen – known bug)", "#d064ff", '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15h6"></path><path d="M12 12v6"></path>')
+                            
+                            # Resolve (Dv)
+                            # export_dv = make_export_btn("resolve", "Export DaVinci Resolve XML", "#ff6464", '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><circle cx="12" cy="14" r="3"></circle>')
+                            
+                            # Final Cut (Fc)
+                            # export_fc = make_export_btn("final-cut-pro", "Export FCP XML", "#64d0ff", '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M10 12l4 2l-4 2z"></path>')
+
+                            export_link = f"{export_pr}" #{export_dv}{export_fc}"
+
                         else:
                             video_tag = f'<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #222; color: #666;"><span>⚠️</span><br>{i18n("External Video")}</div>'
                 except Exception as e:
@@ -208,6 +229,8 @@ def generate_project_gallery(project_path_name, is_full_path=False):
             except: pass
 
             # Card HTML - Dark Grid Style like Opus.pro (Inline Styles)
+            if 'export_link' not in locals(): export_link = "" # Fallback if URL mode didn't trigger
+
             card_html = f"""
             <div style="display: flex; flex-direction: column; background: transparent; overflow: visible;">
                 
@@ -221,7 +244,8 @@ def generate_project_gallery(project_path_name, is_full_path=False):
                     <!-- Top Row: Score and Actions -->
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span style="font-size: 28px; font-weight: 900; line-height: 1; color: {score_color}; font-family: sans-serif;">{score}</span>
-                        <div style="display: flex; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            {export_link}
                             {download_link}
                         </div>
                     </div>
