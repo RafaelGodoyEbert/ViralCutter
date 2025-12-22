@@ -41,10 +41,10 @@ Forget expensive subscriptions and minute limits. ViralCutter offers unlimited p
 -   🖥️ **Modern Interface**: Gradio WebUI, Dark Mode, Project Gallery, and integrated Subtitle Editor.
 
 ## Web Interface (Inspired by Opus Clip)
-![WebUi Home](https://github.com/user-attachments/assets/923f260d-222b-40cc-9ab6-7114d6cefd1c)
+![WebUI Home](https://github.com/user-attachments/assets/ba147149-fc5f-48fc-a03c-fc86b5dc0568)
 *Intuitive control panel with fine-tuning for AI and rendering.*
 
-![WebUI Library](https://github.com/user-attachments/assets/3d9fd063-7e81-4e14-bba6-c66618a1635f)
+![WebUi Library](https://github.com/user-attachments/assets/b0204e4b-0e5d-4ee4-b7b4-cac044b76c24)
 *Library: OpusClip-style gallery and intuitive controls*
 
 ## Local Installation (Super Fast ⚡)
