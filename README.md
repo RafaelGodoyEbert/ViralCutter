@@ -70,7 +70,7 @@ Esqueça assinaturas caras e limites de minutos. O ViralCutter oferece poder ili
 ## Exemplos de Saída
 
 **Clip viral com legendas highlight**  
-<video src="https://github.com/user-attachments/assets/dd9a7039-e0f3-427a-a6e1-f50ab5029082" controls></video>
+<video src="https://github.com/user-attachments/assets/7a32edce-fa29-4693-985f-2b12313362f3" controls></video>
 
 **Comparação direta: Opus Clip vs ViralCutter** (mesmo vídeo de entrada)  
 <video src="https://github.com/user-attachments/assets/12916792-dc0e-4f63-a76b-5698946f50f4" controls></video>
