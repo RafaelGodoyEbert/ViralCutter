@@ -41,10 +41,10 @@ Esqueça assinaturas caras e limites de minutos. O ViralCutter oferece poder ili
 -   🖥️ **Interface Moderna**: WebUI em Gradio, Modo Escuro, Galeria de Projetos e Editor de Legendas integrado.
 
 ## Interface Web (Inspirada no Opus Clip)
-![WebUi Home](https://github.com/user-attachments/assets/923f260d-222b-40cc-9ab6-7114d6cefd1c)
+![WebUI Home](https://github.com/user-attachments/assets/ba147149-fc5f-48fc-a03c-fc86b5dc0568)
 *Painel de controle intuitivo com ajustes finos de IA e renderização.*
 
-![WebUI Library](https://github.com/user-attachments/assets/3d9fd063-7e81-4e14-bba6-c66618a1635f)
+![WebUi Library](https://github.com/user-attachments/assets/b0204e4b-0e5d-4ee4-b7b4-cac044b76c24)
 *Biblioteca: Galeria estilo OpusClip e controles intuitivos*
 
 ## Instalação Local (Super Rápida ⚡)
