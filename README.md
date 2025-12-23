@@ -76,7 +76,7 @@ Esqueça assinaturas caras e limites de minutos. O ViralCutter oferece poder ili
 <video src="https://github.com/user-attachments/assets/12916792-dc0e-4f63-a76b-5698946f50f4" controls></video>
 
 **Modo Split Screen (2 faces)**  
-<video src="https://github.com/user-attachments/assets/ca7ebb9c-52ba-4171-a513-625bef690a2b" controls></video>
+<video src="https://github.com/user-attachments/assets/f5ce5168-04a2-4c9b-9408-949a5400d020" controls></video>
 
 ## Roadmap (TODO)
 
