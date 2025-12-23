@@ -88,7 +88,7 @@ SUBTITLE_PRESETS = {
     "Word Killer (TikTok)": {
         "font_name": "Impact",
         "font_size": 38,
-        "base_color": "#FFFFFF",
+        "base_color": "#FF0000",
         "highlight_color": "#FF0000",
         "outline_color": "#000000",
         "outline_thickness": 3,
@@ -112,7 +112,7 @@ SUBTITLE_PRESETS = {
     "Rapid Fire (Sprint)": {
         "font_name": "Impact",
         "font_size": 36,
-        "base_color": "#FFFFFF",
+        "base_color": "#FFFF00",
         "highlight_color": "#FFFF00",
         "outline_color": "#000000",
         "outline_thickness": 2,
@@ -257,7 +257,7 @@ SUBTITLE_PRESETS = {
         "font_name": "Consolas",
         "font_size": 26,
         "base_color": "#00FF00",
-        "highlight_color": "#FFFFFF",
+        "highlight_color": "#00FF00",
         "outline_color": "#000000",
         "outline_thickness": 2,
         "shadow_color": "#000000",
@@ -266,7 +266,7 @@ SUBTITLE_PRESETS = {
         "italic": False,
         "uppercase": True,
         "highlight_size": 26,
-        "words_per_block": 3,
+        "words_per_block": 1,
         "gap_limit": 0.5,
         "mode": "word_by_word",
         "underline": False,
@@ -279,6 +279,44 @@ SUBTITLE_PRESETS = {
 
 def generate_preview_html(font, size, color, highlight, outline, outline_thick, shadow, shadow_sz, bold, italic, upper, 
                           h_size, w_block, gap, mode, under, strike, border_s, vert_pos, align, remove_punc):
+    
+    # Debug inputs
+    #print(f"DEBUG_HTML: Inputs - Color: {color}, Highlight: {highlight}, Outline: {outline}")
+
+    def sanitize_color(c):
+        if not c: return "#FFFFFF"
+        clean = c.lstrip('#').strip()
+        # Handle RGB/RGBA
+        if clean.lower().startswith("rgb"):
+            try:
+                nums = re.findall(r"[\d\.]+", clean)
+                if len(nums) >= 3:
+                     r = int(float(nums[0]))
+                     g = int(float(nums[1]))
+                     b = int(float(nums[2]))
+                     r = max(0, min(255, r))
+                     g = max(0, min(255, g))
+                     b = max(0, min(255, b))
+                     ret = f"#{r:02X}{g:02X}{b:02X}"
+                     # print(f"DEBUG_HTML: Sanitized {c} -> {ret}")
+                     return ret
+            except Exception as e:
+                print(f"DEBUG_HTML: Sanitize Error: {e}")
+                pass
+        
+        # Ensure # prefix for standard hex if missing
+        if not c.startswith("#") and not c.startswith("rgb"):
+             return f"#{c}"
+             
+        return c 
+
+    color = sanitize_color(color)
+    highlight = sanitize_color(highlight)
+    outline = sanitize_color(outline)
+    shadow = sanitize_color(shadow)
+    
+    #print(f"DEBUG_HTML: Final Colors - Color: {color}, Highlight: {highlight}")
+
     weight = "bold" if bold else "normal"
     style = "italic" if italic else "normal"
     transform = "uppercase" if upper else "none"
@@ -373,11 +411,38 @@ def render_preview_video(font, size, color, highlight, outline, outline_thick, s
                          h_size, w_block, gap, mode, under, strike, border_s, vert_pos, align, remove_punc):
     # Helper to convert HEX to ASS color &HBBGGRR&
     def hex_to_ass(h):
-        if not h: return "&H00FFFFFF"
-        h = h.lstrip('#')
-        if len(h) == 6:
-            return f"&H00{h[4:6]}{h[2:4]}{h[0:2]}"
-        return "&H00FFFFFF"
+        try:
+            with open("debug_preview.log", "a") as f:
+                f.write(f"PREVIEW INPUT: '{h}'\n")
+        except: pass
+        
+        if not h: return "&H00FFFFFF&"
+        
+        hex_clean = h.lstrip('#').strip()
+        
+        # Handle rgb/rgba
+        if hex_clean.lower().startswith("rgb"):
+            try:
+                # regex to capture numbers including floats
+                nums = re.findall(r"[\d\.]+", hex_clean)
+                if len(nums) >= 3:
+                     r = int(float(nums[0]))
+                     g = int(float(nums[1]))
+                     b = int(float(nums[2]))
+                     # Clamp just in case
+                     r = max(0, min(255, r))
+                     g = max(0, min(255, g))
+                     b = max(0, min(255, b))
+                     return f"&H00{b:02X}{g:02X}{r:02X}&".upper()
+            except: pass
+            
+        if len(hex_clean) == 3:
+            hex_clean = "".join([c*2 for c in hex_clean])
+            
+        if len(hex_clean) == 6:
+            return f"&H00{hex_clean[4:6]}{hex_clean[2:4]}{hex_clean[0:2]}&".upper()
+            
+        return "&H00FFFFFF&"
     
     base_c = hex_to_ass(color)
     high_c = hex_to_ass(highlight)
@@ -450,7 +515,23 @@ def render_preview_video(font, size, color, highlight, outline, outline_thick, s
         subprocess.run(cmd, cwd=WORKING_DIR, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         if os.path.exists(out_vid_path):
-            return out_vid_path
+            import shutil
+            # Create a timestamped copy to force browser cache refresh
+            import time
+            timestamp = int(time.time())
+            cache_bust_path = os.path.join(preview_dir, f"preview_render_{timestamp}.mp4")
+            shutil.copy(out_vid_path, cache_bust_path)
+            
+            # Clean old files
+            try:
+                for f in os.listdir(preview_dir):
+                    if f.startswith("preview_render_") and f.endswith(".mp4") and f != os.path.basename(cache_bust_path):
+                        try:
+                            os.remove(os.path.join(preview_dir, f))
+                        except: pass
+            except: pass
+            
+            return gr.update(value=cache_bust_path, autoplay=True)
             
     except Exception as e:
         print(f"Preview Gen Error: {e}")

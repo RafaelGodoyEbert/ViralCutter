@@ -2,10 +2,22 @@ import os
 import re
 import yt_dlp
 import sys
+from i18n.i18n import I18nAuto
+i18n = I18nAuto()
 
 def sanitize_filename(name):
-    """Remove caracteres inválidos para nomes de arquivos/pastas."""
+    """Remove caracteres inválidos e emojis para evitar erro de encoding no Windows."""
+    # Remove caracteres reservados do sistema de arquivos
     cleaned = re.sub(r'[\\/*?:"<>|]', "", name)
+    
+    # Remove emojis e caracteres não suportados pelo console Windows (CP1252)
+    # Isso mantém acentos (á, ç, é) mas remove 😱, etc.
+    try:
+        cleaned = cleaned.encode('cp1252', 'ignore').decode('cp1252')
+    except:
+        # Fallback se não tiver CP1252: remove tudo não-ascii (remove acentos)
+        cleaned = cleaned.encode('ascii', 'ignore').decode('ascii')
+        
     cleaned = cleaned.strip()
     return cleaned
 
@@ -21,7 +33,8 @@ def progress_hook(d):
 
 def download(url, base_root="VIRALS", download_subs=True, quality="best"):
     # 1. Extrair informações do vídeo para pegar o título
-    print("Extraindo informações do vídeo...")
+    # 1. Extrair informações do vídeo para pegar o título
+    print(i18n("Extracting video information..."))
     title = None
     
     # ... (Keep existing title extraction logic) ...
@@ -35,8 +48,11 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
             info = ydl.extract_info(url, download=False)
             title = info.get('title')
     except Exception as e:
-        print(f"Aviso: Falha ao extrair info com cookies: {e}")
-        
+        try:
+            print(i18n("Warning: Failed to extract info with cookies: {}").format(e))
+        except UnicodeEncodeError:
+            print(i18n("Warning: Failed to extract info with cookies: [Encoding Error in Message]"))
+
     # Tentativa 2: Sem cookies
     if not title:
         try:
@@ -44,15 +60,23 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
                 info = ydl.extract_info(url, download=False)
                 title = info.get('title')
         except Exception as e:
-            print(f"Erro ao obter informações do vídeo (sem cookies): {e}")
+            try:
+                print(i18n("Error getting video info (without cookies): {}").format(e))
+            except UnicodeEncodeError:
+                print(i18n("Error getting video info (without cookies): [Encoding Error in Message]"))
 
     # Fallback final
     if title:
         safe_title = sanitize_filename(title)
-        print(f"Título detectado: {title}")
+        try:
+            print(i18n("Detected title: {}").format(title))
+        except UnicodeEncodeError:
+            # Fallback for Windows consoles that choke on Emojis
+            clean_title = title.encode('ascii', 'replace').decode('ascii')
+            print(i18n("Detected title: {}").format(clean_title))
     else:
-        print("AVISO: Título não pôde ser obtido. Usando 'Unknown_Video'.")
-        safe_title = "Unknown_Video"
+        print(i18n("WARNING: Title could not be obtained. Using 'Unknown_Video'."))
+        safe_title = i18n("Unknown_Video")
 
     # 2. Criar estrutura de pastas
     project_folder = os.path.join(base_root, safe_title)
@@ -66,11 +90,14 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
     # Verificação inteligente
     if os.path.exists(final_video_path):
         if os.path.getsize(final_video_path) > 1024: 
-            print(f"Vídeo já existe em: {final_video_path}")
-            print("Pulando download e reutilizando arquivo local.")
+            try:
+                print(i18n("Video already exists at: {}").format(final_video_path))
+            except UnicodeEncodeError:
+                print(i18n("Video already exists at: {}").format(final_video_path.encode('ascii', 'replace').decode('ascii')))
+            print(i18n("Skipping download and reusing local file."))
             return final_video_path, project_folder
         else:
-            print("Arquivo existente encontrado mas parece corrompido/vazio. Baixando novamente...")
+            print(i18n("Existing file found but seems corrupted/empty. Downloading again..."))
             try:
                 os.remove(final_video_path)
             except:
@@ -92,7 +119,7 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
         "480p": 'bestvideo[height<=480]+bestaudio/best[height<=480]'
     }
     selected_format = quality_map.get(quality, 'bestvideo+bestaudio/best')
-    print(f"Configurando qualidade de download: {quality} -> {selected_format}")
+    print(i18n("Configuring download quality: {} -> {}").format(quality, selected_format))
 
     ydl_opts = {
         'format': selected_format,
@@ -124,7 +151,10 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
             'format': 'srt',
         }]
 
-    print(f"Baixando vídeo para: {project_folder}...")
+    try:
+        print(i18n("Downloading video to: {}...").format(project_folder))
+    except UnicodeEncodeError:
+        print(i18n("Downloading video to: {}...").format(project_folder.encode('ascii', 'replace').decode('ascii')))
     
     # Tentativa 1: Com configuração original
     try:
@@ -132,9 +162,15 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
             ydl.download([url])
     except yt_dlp.utils.DownloadError as e:
         error_str = str(e)
-        if download_subs and ("Unable to download video subtitles" in error_str or "429" in error_str):
-            print(f"\nAviso: Erro ao baixar legendas ({e}).")
-            print("Tentando novamente APENAS o vídeo (sem legendas)...")
+        if "No address associated with hostname" in error_str or "Failed to resolve" in error_str:
+            print(i18n("\n[CRITICAL ERROR] Connection Failure: Could not access YouTube."))
+            print(i18n("Check your internet connection or if there is any DNS block."))
+            print(i18n("Details: {}").format(e))
+            sys.exit(1)
+        
+        elif download_subs and ("Unable to download video subtitles" in error_str or "429" in error_str):
+            print(i18n("\nWarning: Error downloading subtitles ({}).").format(e))
+            print(i18n("Retrying ONLY the video (without subtitles)..."))
             
             ydl_opts['writesubtitles'] = False
             ydl_opts['writeautomaticsub'] = False
@@ -144,16 +180,16 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
             except Exception as e2:
-                print(f"Erro fatal na segunda tentativa: {e2}")
+                print(i18n("Fatal error on second attempt: {}").format(e2))
                 raise
         elif "is not a valid URL" in error_str:
-             print("Erro: o link inserido não é válido.")
+             print(i18n("Error: the entered link is not valid."))
              raise 
         else:
-            print(f"Erro no download: {e}")
+            print(i18n("Download error: {}").format(e))
             raise
     except Exception as e:
-        print(f"Erro inesperado: {e}")
+        print(i18n("Unexpected error: {}").format(e))
         raise
 
     # RENOMEAR LEGENDA PARA PADRÃO (input.vtt ou input.srt)
@@ -169,7 +205,10 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
             new_name = os.path.join(project_folder, "input.srt") # Vamos padronizar tudo para .srt
             
             if ext.lower() == '.vtt':
-                print(f"Formatando legenda VTT complexa ({os.path.basename(best_sub)}) para SRT limpo...")
+                try:
+                    print(i18n("Formatting complex VTT subtitle ({}) to clean SRT...").format(os.path.basename(best_sub)))
+                except UnicodeEncodeError:
+                    print(i18n("Formatting complex VTT subtitle ({}) to clean SRT...").format(os.path.basename(best_sub).encode('ascii', 'replace').decode('ascii')))
                 try:
                     with open(best_sub, 'r', encoding='utf-8') as f:
                         lines = f.readlines()
@@ -243,12 +282,15 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
                     with open(new_name, 'w', encoding='utf-8') as f_out:
                         f_out.writelines(srt_content)
                     
-                    print(f"Legenda convertida e limpa: {new_name}")
+                    try:
+                        print(i18n("Subtitle converted and cleaned: {}").format(new_name))
+                    except UnicodeEncodeError:
+                        print(i18n("Subtitle converted and cleaned: {}").format(new_name.encode('ascii', 'replace').decode('ascii')))
                     try: os.remove(best_sub) 
                     except: pass
                     
                 except Exception as e_conv:
-                    print(f"Falha ao converter VTT: {e_conv}. Mantendo original.")
+                    print(i18n("Failed to convert VTT: {}. Keeping original.").format(e_conv))
                     # Fallback: rename apenas
                     new_name_fallback = os.path.join(project_folder, "input.vtt")
                     if os.path.exists(new_name_fallback) and new_name_fallback != best_sub:
@@ -262,7 +304,10 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
                     try: os.remove(new_name)
                     except: pass
                 os.rename(best_sub, new_name)
-                print(f"Legenda SRT renomeada para: {new_name}")
+                try:
+                    print(i18n("SRT subtitle renamed to: {}").format(new_name))
+                except UnicodeEncodeError:
+                    print(i18n("SRT subtitle renamed to: {}").format(new_name.encode('ascii', 'replace').decode('ascii')))
             
             # Limpa sobras
             for extra in potential_subs[1:]:
@@ -270,6 +315,6 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
                 except: pass
 
     except Exception as e_ren:
-        print(f"Erro ao processar legendas: {e_ren}")
+        print(i18n("Error processing subtitles: {}").format(e_ren))
 
     return final_video_path, project_folder

@@ -28,7 +28,7 @@ The transcript below is a continuous text stream with embedded **Time Tags** lik
 
 4.  **DURATION MATH:**
     -   Use the `(XXs)` tags to estimate duration.
-    -   Target: {min_duration}s to {max_duration}s.
+    -   CONSTRAINT: Segment MUST be between {min_duration}s and {max_duration}s.
 
 ### YOUR TASK:
 Analyze the transcript below. Find {amount} potential viral segments.

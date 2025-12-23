@@ -3,7 +3,7 @@ import numpy as np
 import os
 import subprocess
 import mediapipe as mp
-from scripts.one_face import crop_and_resize_single_face, resize_with_padding, detect_face_or_body
+from scripts.one_face import crop_and_resize_single_face, resize_with_padding, detect_face_or_body, crop_center_zoom
 from scripts.two_face import crop_and_resize_two_faces, detect_face_or_body_two_faces
 try:
     from scripts.face_detection_insightface import init_insightface, detect_faces_insightface, crop_and_resize_insightface
@@ -11,6 +11,66 @@ try:
 except ImportError:
     INSIGHTFACE_AVAILABLE = False
     print("InsightFace not found or error importing. Install with: pip install insightface onnxruntime-gpu")
+
+
+# Global cache for encoder
+CACHED_ENCODER = None
+
+def get_best_encoder():
+    global CACHED_ENCODER
+    if CACHED_ENCODER: return CACHED_ENCODER
+    
+    try:
+        # Check available encoders
+        result = subprocess.run(['ffmpeg', '-hide_banner', '-encoders'], capture_output=True, text=True)
+        output = result.stdout
+        
+        # Priority: NVENC (NVIDIA) > AMF (AMD) > QSV (Intel) > CPU
+        if "h264_nvenc" in output:
+            print("Encoder Detected: NVIDIA (h264_nvenc)")
+            CACHED_ENCODER = ("h264_nvenc", "fast") # p1-p7 presets could be used but 'fast' maps well
+            return CACHED_ENCODER
+        
+        if "h264_amf" in output:
+            print("Encoder Detected: AMD (h264_amf)")
+            CACHED_ENCODER = ("h264_amf", "speed") # quality, speed, balanced
+            return CACHED_ENCODER
+            
+        if "h264_qsv" in output:
+             print("Encoder Detected: Intel QSV (h264_qsv)")
+             CACHED_ENCODER = ("h264_qsv", "veryfast")
+             return CACHED_ENCODER
+             
+        # Mac OS (VideoToolbox)
+        if "h264_videotoolbox" in output:
+             print("Encoder Detected: MacOS (h264_videotoolbox)")
+             CACHED_ENCODER = ("h264_videotoolbox", "default")
+             return CACHED_ENCODER
+
+    except Exception as e:
+        print(f"Error checking encoders: {e}")
+
+    print("Encoder Detected: CPU (libx264)")
+    CACHED_ENCODER = ("libx264", "ultrafast")
+    return CACHED_ENCODER
+
+def get_target_resolution(width, height):
+    """
+    Calculate target 9:16 resolution based on input size.
+    Preserves 4K height if available.
+    """
+    # Use max of 1920 or input height to avoid downscaling 4K content
+    # If input is 4K (H=2160), use 2160.
+    target_h = max(1920, height)
+    
+    # Ensure divisible by 2
+    if target_h % 2 != 0: target_h -= 1
+    
+    # Calculate width for 9:16
+    target_w = int(target_h * 9 / 16)
+    if target_w % 2 != 0: target_w -= 1
+    
+    return target_w, target_h
 
 def get_center_bbox(bbox):
     # bbox: [x1, y1, x2, y2]
@@ -52,9 +112,9 @@ def sort_by_proximity(new_faces, old_faces, center_func):
     
     return new_faces
 
-def generate_short_fallback(input_file, output_file, index, project_folder, final_folder):
-    """Fallback function: Center Crop if MediaPipe fails."""
-    print(f"Processing (Center Crop Fallback): {input_file}")
+def generate_short_fallback(input_file, output_file, index, project_folder, final_folder, no_face_mode="padding"):
+    """Fallback function: Center Crop (Zoom) or Padding if detection fails."""
+    print(f"Processing (Fallback): {input_file} | Mode: {no_face_mode}")
     cap = cv2.VideoCapture(input_file)
     if not cap.isOpened():
         print(f"Error opening video: {input_file}")
@@ -65,8 +125,10 @@ def generate_short_fallback(input_file, output_file, index, project_folder, fina
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
     # Target dimensions (9:16)
-    target_width = 1080
-    target_height = 1920
+    target_width, target_height = get_target_resolution(width, height)
+    print(f"Target Resolution: {target_width}x{target_height}")
+    
+    encoder_name, encoder_preset = get_best_encoder()
     
     # Use FFmpeg Pipe instead of cv2.VideoWriter to avoid OpenCV backend errors
     ffmpeg_cmd = [
@@ -77,12 +139,16 @@ def generate_short_fallback(input_file, output_file, index, project_folder, fina
         '-pix_fmt', 'bgr24',
         '-r', str(fps),
         '-i', '-',
-        '-c:v', 'libx264', # or h264_nvenc if available
-        '-preset', 'fast',
+        '-c:v', encoder_name,
+        '-preset', encoder_preset,
         '-pix_fmt', 'yuv420p',
         output_file
     ]
     
+    # If using hardware encoder, we might want to set bitrate to ensure quality
+    if "nvenc" in encoder_name or "amf" in encoder_name:
+         ffmpeg_cmd.extend(["-b:v", "15M"])
+
     process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
     while True:
@@ -90,38 +156,19 @@ def generate_short_fallback(input_file, output_file, index, project_folder, fina
         if not ret:
             break
         
-        # Resize mantendo aspect ratio para cobrir altura 1920
-        scale_factor = target_height / height
-        # Se após o resize a largura for menor que 1080, escala pela largura
-        if width * scale_factor < target_width:
-             scale_factor = target_width / width
-             
-        # Garante dimensoes inteiras
-        new_w = int(width * scale_factor)
-        new_h = int(height * scale_factor)
-        
-        resized = cv2.resize(frame, (new_w, new_h))
-        
-        # Crop center
-        res_h, res_w, _ = resized.shape
-        start_x = (res_w - target_width) // 2
-        start_y = (res_h - target_height) // 2
-        
-        if start_x < 0: start_x = 0
-        if start_y < 0: start_y = 0
-
-        cropped = resized[start_y:start_y+target_height, start_x:start_x+target_width]
-        
-        # Resize final por segurança e validação
-        if cropped.shape[1] != target_width or cropped.shape[0] != target_height:
-            cropped = cv2.resize(cropped, (target_width, target_height))
+        if no_face_mode == "zoom":
+             result = crop_center_zoom(frame, (target_width, target_height))
+        else:
+             result = resize_with_padding(frame, (target_width, target_height))
         
         try:
             # Write raw bytes to ffmpeg stdin
-            process.stdin.write(cropped.tobytes())
+            process.stdin.write(result.tobytes())
         except Exception as e:
             print(f"Error writing frame to ffmpeg pipe: {e}")
             pass
+        
+
 
     cap.release()
     process.stdin.close()
@@ -137,11 +184,12 @@ def finalize_video(input_file, output_file, index, fps, project_folder, final_fo
 
     if os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
         final_output = os.path.join(final_folder, f"final-output{str(index).zfill(3)}_processed.mp4")
+        encoder_name, encoder_preset = get_best_encoder()
         command = [
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-stats",
             "-i", output_file,
             "-i", audio_file,
-            "-c:v", "h264_nvenc", "-preset", "fast", "-b:v", "5M",
+            "-c:v", encoder_name, "-preset", encoder_preset, "-b:v", "15M",
             "-c:a", "aac", "-b:a", "192k",
             "-r", str(fps),
             final_output
@@ -191,7 +239,7 @@ def calculate_mouth_ratio(landmarks):
     
     return h / w
 
-def generate_short_mediapipe(input_file, output_file, index, face_mode, project_folder, final_folder, face_detection, face_mesh, pose, detection_period=None):
+def generate_short_mediapipe(input_file, output_file, index, face_mode, project_folder, final_folder, face_detection, face_mesh, pose, detection_period=None, no_face_mode="padding"):
     try:
         cap = cv2.VideoCapture(input_file)
         if not cap.isOpened():
@@ -203,8 +251,10 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
+        target_width, target_height = get_target_resolution(frame_width, frame_height)
+        
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_file, fourcc, fps, (1080, 1920))
+        out = cv2.VideoWriter(output_file, fourcc, fps, (target_width, target_height))
 
         next_detection_frame = 0
         current_interval = int(5 * fps) # Initial guess
@@ -218,8 +268,8 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
         
         last_detected_faces = None
         last_frame_face_positions = None
-        frames_since_last_detection = 0
-        max_frames_without_detection = int(5 * fps) # Fallback timeout
+        last_success_frame = -1000
+        max_frames_without_detection = int(3.0 * fps) # 3 seconds timeout
 
         transition_duration = int(fps)
         transition_frames = []
@@ -275,9 +325,9 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
                     else:
                         transition_frames = []
                     last_detected_faces = current_detections
-                    frames_since_last_detection = 0
+                    last_success_frame = frame_index
                 else:
-                    frames_since_last_detection += 1
+                    pass
                 
                 # Update next detection frame
                 step = 5
@@ -300,10 +350,13 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
             if len(transition_frames) > 0:
                 current_faces = transition_frames[0]
                 transition_frames = transition_frames[1:]
-            elif last_detected_faces is not None and frames_since_last_detection <= max_frames_without_detection:
+            elif last_detected_faces is not None and (frame_index - last_success_frame) <= max_frames_without_detection:
                 current_faces = last_detected_faces
             else:
-                result = resize_with_padding(frame)
+                if no_face_mode == "zoom":
+                    result = crop_center_zoom(frame, (target_width, target_height))
+                else:
+                    result = resize_with_padding(frame, (target_width, target_height))
                 coordinate_log.append({"frame": frame_index, "faces": []})
                 out.write(result)
                 continue
@@ -311,15 +364,18 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
             last_frame_face_positions = current_faces
 
             if hasattr(current_faces, '__len__') and len(current_faces) == 2:
-                 result = crop_and_resize_two_faces(frame, current_faces)
+                 result = crop_and_resize_two_faces(frame, current_faces, target_size=(target_width, target_height))
             else:
                  # Ensure it's list of tuples or single tuple? current_faces is list of tuples from detection
                  # If 1 face: [ (x,y,w,h) ]
                  if hasattr(current_faces, '__len__') and len(current_faces) > 0:
                      f = current_faces[0]
-                     result = crop_and_resize_single_face(frame, f)
+                     result = crop_and_resize_single_face(frame, f, target_size=(target_width, target_height))
                  else:
-                     result = resize_with_padding(frame)
+                     if no_face_mode == "zoom":
+                         result = crop_center_zoom(frame, (target_width, target_height))
+                     else:
+                         result = resize_with_padding(frame, (target_width, target_height))
             
             out.write(result)
 
@@ -332,7 +388,7 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
         print(f"Error in MediaPipe processing: {e}")
         raise e # Rethrow to trigger fallback
 
-def generate_short_haar(input_file, output_file, index, project_folder, final_folder, detection_period=None):
+def generate_short_haar(input_file, output_file, index, project_folder, final_folder, detection_period=None, no_face_mode="padding"):
     """Face detection using OpenCV Haar Cascades."""
     print(f"Processing (Haar Cascade): {input_file}")
     
@@ -351,9 +407,13 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    target_width, target_height = get_target_resolution(frame_width, frame_height)
     
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_file, fourcc, fps, (1080, 1920))
+    out = cv2.VideoWriter(output_file, fourcc, fps, (target_width, target_height))
     
     # Logic copied from generate_short_mediapipe
     detection_interval = int(2 * fps) # Default check every 2 seconds
@@ -361,8 +421,8 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
         detection_interval = max(1, int(detection_period * fps))
     last_detected_faces = None
     last_frame_face_positions = None
-    frames_since_last_detection = 0
-    max_frames_without_detection = int(5 * fps)
+    last_success_frame = -1000
+    max_frames_without_detection = int(3.0 * fps)
 
     transition_duration = int(fps) # 1 second smooth transition
     transition_frames = []
@@ -399,18 +459,21 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
                 else:
                     transition_frames = []
                 last_detected_faces = detections
-                frames_since_last_detection = 0
+                last_success_frame = frame_index
             else:
-                frames_since_last_detection += 1
+                pass
 
         if len(transition_frames) > 0:
             current_faces = transition_frames[0]
             transition_frames = transition_frames[1:]
-        elif last_detected_faces is not None and frames_since_last_detection <= max_frames_without_detection:
+        elif last_detected_faces is not None and (frame_index - last_success_frame) <= max_frames_without_detection:
             current_faces = last_detected_faces
         else:
             # No face detected for a while -> Center/Padding fallback
-            result = resize_with_padding(frame)
+            if no_face_mode == "zoom":
+                result = crop_center_zoom(frame, (target_width, target_height))
+            else:
+                result = resize_with_padding(frame, (target_width, target_height))
             out.write(result)
             continue
 
@@ -422,7 +485,7 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
         else:
              face_bbox = current_faces # Should be handled
 
-        result = crop_and_resize_single_face(frame, face_bbox)
+        result = crop_and_resize_single_face(frame, face_bbox, target_size=(target_width, target_height))
         out.write(result)
 
     cap.release()
@@ -434,7 +497,7 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
 
     finalize_video(input_file, output_file, index, fps, project_folder, final_folder)
 
-def generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0):
+def generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, no_face_mode="padding"):
     """Face detection using InsightFace (SOTA)."""
     print(f"Processing (InsightFace): {input_file} | Mode: {face_mode}")
     
@@ -448,17 +511,20 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
+    target_width, target_height = get_target_resolution(frame_width, frame_height)
+    print(f"Target Resolution: {target_width}x{target_height}")
+
     # Using mp4v for container, but final mux will fix encoding
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_file, fourcc, fps, (1080, 1920))
+    out = cv2.VideoWriter(output_file, fourcc, fps, (target_width, target_height))
     
     # Dynamic Interval Logic
     next_detection_frame = 0
     
     last_detected_faces = None
     last_frame_face_positions = None
-    frames_since_last_detection = 0
-    max_frames_without_detection = 90 # 3 seconds timeout
+    last_success_frame = -1000
+    max_frames_without_detection = int(3.0 * fps) # 3 seconds timeout
 
     transition_duration = 4 # Smooth transition over 4 frames (almost continuous)
     transition_frames = []
@@ -567,6 +633,22 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                     
                     is_talking = 1.0 if mar > active_speaker_mar else 0.0 
                     
+
+            # --- CROWD MODE LOGIC ---
+            # If too many faces, don't even try to track. Fallback to No-Face logic (Zoom/Padding)
+            CROWD_THRESHOLD = 7 
+            # FIX: Use last_raw_faces (before size filtering) so we count background people too!
+            is_crowd = len(last_raw_faces) >= CROWD_THRESHOLD
+            if is_crowd:
+                print(f"DEBUG: Crowd Mode Active! {len(faces)} faces >= {CROWD_THRESHOLD}. Triggering Fallback (No Face Mode).")
+                faces = [] 
+                valid_faces = [] # CAUTION: Must clear strict backup too!
+                # FORCE RESET HISTORY so it doesn't "stick" to the last face found
+                last_detected_faces = None
+                transition_frames = []
+                faces_activity_state = [] 
+                zoom_ema_bbox = None # Reset smoothing too
+            # ---------------------------
 
             # Update Activity State - Two Pass for Global Motion Compensation
             if focus_active_speaker and faces:
@@ -723,7 +805,8 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
             # -----------------------------
             
             # Fallback Lookahead: If detection fails or partial
-            if len(faces) < target_faces:
+            # But DO NOT look ahead if we are in Crowd Mode (we explicitly wanted 0 faces)
+            if len(faces) < target_faces and not is_crowd:
                 # Try 1 frame ahead
                 ret2, frame2 = cap.read()
                 if ret2 and frame2 is not None:
@@ -872,9 +955,10 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                     # Reset transition if face count changed or first detect
                     transition_frames = []
                 last_detected_faces = detections
-                frames_since_last_detection = 0
+                last_success_frame = frame_index
             else:
-                frames_since_last_detection += 1
+                pass
+
 
             # Update next detection frame based on NEW state
             step = 5 # Default fallback (very fast)
@@ -899,12 +983,21 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
         if len(transition_frames) > 0:
             current_faces = transition_frames[0]
             transition_frames = transition_frames[1:]
-        elif last_detected_faces is not None and frames_since_last_detection <= max_frames_without_detection:
+        elif last_detected_faces is not None and (frame_index - last_success_frame) <= max_frames_without_detection:
             current_faces = last_detected_faces
         else:
             # Fallback for this frame
-            result = resize_with_padding(frame)
+            if no_face_mode == "zoom":
+                result = crop_center_zoom(frame)
+            else:
+                result = resize_with_padding(frame)
             out.write(result)
+            timeline_frames.append((frame_index, "1")) # Fix: Ensure fallback is treated as single face for subs
+            
+            # Fix XML Log sync (Empty faces for fallback)
+            coords_entry = {"frame": frame_index, "src_size": [frame_width, frame_height], "faces": []}
+            coordinate_log.append(coords_entry)
+            
             continue
 
         last_frame_face_positions = current_faces
@@ -1017,7 +1110,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     return "1"
 
 
-def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, segments_data=None):
+def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, segments_data=None, no_face_mode="padding"):
     # Lazy init solutions only when needed to avoid AttributeError if import failed partially
     mp_face_detection = None
     mp_face_mesh = None
@@ -1118,7 +1211,8 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
                                                      active_speaker_mar=active_speaker_mar, active_speaker_score_diff=active_speaker_score_diff, include_motion=include_motion,
                                                      active_speaker_motion_deadzone=active_speaker_motion_deadzone,
                                                      active_speaker_motion_sensitivity=active_speaker_motion_sensitivity,
-                                                     active_speaker_decay=active_speaker_decay)
+                                                     active_speaker_decay=active_speaker_decay,
+                                                     no_face_mode=no_face_mode)
                     if res: detected_mode = res
                     success = True
                 except Exception as e:
@@ -1134,7 +1228,7 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
                          mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=2, refine_landmarks=True, min_detection_confidence=0.2, min_tracking_confidence=0.2) as face_mesh, \
                          mp_pose.Pose(static_image_mode=False, min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
                         
-                        generate_short_mediapipe(input_file, output_file, index, face_mode, project_folder, final_folder, face_detection, face_mesh, pose, detection_period=detection_period)
+                        generate_short_mediapipe(input_file, output_file, index, face_mode, project_folder, final_folder, face_detection, face_mesh, pose, detection_period=detection_period, no_face_mode=no_face_mode)
                         # We don't easily know detected mode here without return, assuming '1' or '2' based on last frame? 
                         # Ideally function should return as well.
                         detected_mode = "1" # Placeholder, user didn't complain about stats.
@@ -1149,14 +1243,14 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
             if not success and (use_haar or (not mediapipe_working and not insightface_working)):
                  try:
                     print("Attempts with Haar Cascade...")
-                    generate_short_haar(input_file, output_file, index, project_folder, final_folder, detection_period=detection_period)
+                    generate_short_haar(input_file, output_file, index, project_folder, final_folder, detection_period=detection_period, no_face_mode=no_face_mode)
                     success = True
                  except Exception as e2:
                     print(f"Haar fallback also failed: {e2}")
 
             # 4. Last Resort: Center Crop
             if not success:
-                generate_short_fallback(input_file, output_file, index, project_folder, final_folder)
+                generate_short_fallback(input_file, output_file, index, project_folder, final_folder, no_face_mode=no_face_mode)
                 detected_mode = "1"
                 success = True
             

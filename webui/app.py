@@ -4,6 +4,7 @@ import os
 import sys
 import json
 import psutil
+import shutil
 import datetime
 import time
 import urllib.parse
@@ -55,14 +56,62 @@ current_process = None
 
 # Helpers
 def convert_color_to_ass(hex_color, alpha="00"):
-    if not hex_color or not hex_color.startswith("#"):
+    try:
+        with open("debug_colors.log", "a") as f:
+             f.write(f"INPUT: '{hex_color}'\n")
+    except: pass
+
+    if not hex_color:
         return f"&H{alpha}FFFFFF&"
-    hex_clean = hex_color.lstrip('#')
+    
+    hex_clean = hex_color.lstrip('#').strip()
+    
+    # Handle rgb/rgba format: rgb(255, 215, 0)
+    if hex_clean.lower().startswith("rgb"):
+        try:
+            # Extract numbers including floats
+            nums = re.findall(r"[\d\.]+", hex_clean)
+            if len(nums) >= 3:
+                r = int(float(nums[0]))
+                g = int(float(nums[1]))
+                b = int(float(nums[2]))
+                # Clamp
+                r = max(0, min(255, r))
+                g = max(0, min(255, g))
+                b = max(0, min(255, b))
+                # Convert to hex
+                ret = f"&H{alpha}{b:02X}{g:02X}{r:02X}&".upper()
+                try:
+                    with open("debug_colors.log", "a") as f:
+                         f.write(f"PARSED RGB: {ret}\n")
+                except: pass
+                return ret
+        except Exception as e:
+            try:
+                with open("debug_colors.log", "a") as f:
+                     f.write(f"RGB ERROR: {e}\n")
+            except: pass
+
+    # Handle 3-digit hex (e.g. F00 -> FF0000)
+    if len(hex_clean) == 3:
+        hex_clean = "".join([c*2 for c in hex_clean])
+        
     if len(hex_clean) == 6:
         r = hex_clean[0:2]
         g = hex_clean[2:4]
         b = hex_clean[4:6]
-        return f"&H{alpha}{b}{g}{r}&"
+        # Uppercase just in case
+        ret = f"&H{alpha}{b}{g}{r}&".upper() 
+        try:
+            with open("debug_colors.log", "a") as f:
+                 f.write(f"PARSED HEX: {ret}\n")
+        except: pass
+        return ret
+        
+    try:
+        with open("debug_colors.log", "a") as f:
+             f.write(f"INVALID: Defaulting to White\n")
+    except: pass
     return f"&H{alpha}FFFFFF&"
 
 def kill_process():
@@ -129,7 +178,7 @@ def apply_experimental_preset(preset_name):
 # Subtitle logic moved to subtitle_handler.py
 
 
-def run_viral_cutter(input_source, project_name, url, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, 
+def run_viral_cutter(input_source, project_name, url, video_file, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, no_face_mode, 
                      face_filter_thresh, face_two_thresh, face_conf_thresh, face_dead_zone, focus_active_speaker, active_speaker_mar, active_speaker_score_diff, include_motion, active_speaker_motion_threshold, active_speaker_motion_sensitivity, active_speaker_decay,
                      use_custom_subs, font_name, font_size, font_color, highlight_color, outline_color, outline_thickness, shadow_color, shadow_size, is_bold, is_italic, is_uppercase, vertical_pos, alignment,
                      h_size, w_block, gap, mode, under, strike, border_s, remove_punc, video_quality, use_youtube_subs, translate_target):
@@ -146,6 +195,32 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
              return
         full_project_path = os.path.join(VIRALS_DIR, project_name)
         cmd.extend(["--project-path", full_project_path])
+    elif input_source == "Upload Video":
+        if not video_file:
+             yield i18n("Error: No video file uploaded."), gr.update(value=i18n("Start Processing"), interactive=True), gr.update(visible=False), None
+             return
+        
+        # Determine project name from filename
+        original_filename = os.path.basename(video_file)
+        name_no_ext = os.path.splitext(original_filename)[0]
+        # Sanitize: Allow alphanumeric, space, dash, underscore
+        safe_name = "".join([c for c in name_no_ext if c.isalnum() or c in " _-"]).strip()
+        if not safe_name: safe_name = "Untitled_Upload"
+        
+        # Always append timestamp as requested
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        project_name_upload = f"{safe_name}_{timestamp}"
+        project_path = os.path.join(VIRALS_DIR, project_name_upload)
+             
+        os.makedirs(project_path, exist_ok=True)
+        
+        target_path = os.path.join(project_path, "input.mp4")
+        shutil.copy(video_file, target_path)
+        
+        cmd.extend(["--project-path", project_path])
+        # Skip YouTube subs as it is a local upload
+        cmd.append("--skip-youtube-subs")
+        
     else:
         if url: cmd.extend(["--url", url])
         # Pass Video Quality
@@ -176,6 +251,7 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
     cmd.extend(["--face-model", face_model])
     cmd.extend(["--face-mode", face_mode])
     if face_detect_interval: cmd.extend(["--face-detect-interval", str(face_detect_interval)])
+    if no_face_mode: cmd.extend(["--no-face-mode", no_face_mode])
     
     # New Face Params
     if face_filter_thresh is not None: cmd.extend(["--face-filter-threshold", str(face_filter_thresh)])
@@ -233,6 +309,8 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
              # If using existing project, we already know the path, but let's see if logs confirm it
              project_folder_path = os.path.join(VIRALS_DIR, project_name)
 
+        last_update_time = time.time()
+        
         while True:
             line = current_process.stdout.readline()
             if not line and current_process.poll() is not None:
@@ -243,7 +321,15 @@ def run_viral_cutter(input_source, project_name, url, segments, viral, themes, m
                 if "Project Folder:" in line:
                     parts = line.split("Project Folder:")
                     if len(parts) > 1: project_folder_path = parts[1].strip()
-                yield logs, gr.update(visible=True, interactive=False), gr.update(visible=True), None
+                
+                # Throttle updates to avoid browser freeze (0.2s interval)
+                current_time = time.time()
+                if current_time - last_update_time > 0.2:
+                    yield logs, gr.update(visible=True, interactive=False), gr.update(visible=True), None
+                    last_update_time = current_time
+        
+        # Final yield to ensure all logs are shown
+        yield logs, gr.update(visible=True, interactive=False), gr.update(visible=True), None
     except Exception as e:
         logs += f"\nError running process: {str(e)}\n"
         yield logs, gr.update(visible=True, interactive=False), gr.update(visible=True), None
@@ -307,9 +393,10 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
         with gr.Tab(i18n("Create New")):
              with gr.Row():
                 with gr.Column(scale=1):
-                    input_source = gr.Radio([(i18n("YouTube URL"), "YouTube URL"), (i18n("Existing Project"), "Existing Project")], label=i18n("Input Source"), value="YouTube URL")
+                    input_source = gr.Radio([(i18n("YouTube URL"), "YouTube URL"), (i18n("Existing Project"), "Existing Project"), (i18n("Upload Video"), "Upload Video")], label=i18n("Input Source"), value="YouTube URL")
                     
                     url_input = gr.Textbox(label=i18n("YouTube URL"), placeholder="https://www.youtube.com/watch?v=...", visible=True)
+                    video_upload = gr.File(label=i18n("Upload Video"), file_count="single", file_types=["video"], visible=False)
                     
                     with gr.Row():
                         video_quality_input = gr.Dropdown(choices=["best", "1080p", "720p", "480p"], label=i18n("Video Quality"), value="best")
@@ -320,11 +407,13 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     
                     def on_source_change(source):
                         if source == "YouTube URL":
-                            return gr.update(visible=True), gr.update(visible=False), gr.update(value="Full") # Reset to Full if URL is picked? Optional.
+                            return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(value="Full") 
+                        elif source == "Upload Video":
+                             return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), gr.update(value="Full")
                         else:
                             # Load projects
                             projs = library.get_existing_projects()
-                            return gr.update(visible=False), gr.update(choices=projs, visible=True), gr.update(value="Subtitles Only") # Auto-switch to Subs Only
+                            return gr.update(visible=False), gr.update(choices=projs, visible=True), gr.update(visible=False), gr.update(value="Subtitles Only")
                     
                     
                     with gr.Row():
@@ -344,7 +433,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     with gr.Row():
                         ai_model_input = gr.Dropdown(choices=GEMINI_MODELS, label=i18n("AI Model"), value=GEMINI_MODELS[1], allow_custom_value=True, visible=True, scale=5)
                         refresh_models_btn = gr.Button("🔄", size="sm", visible=False, scale=0, min_width=50) # Only local
-                        chunk_size_input = gr.Number(label=i18n("Chunk Size"), value=20000, precision=0, scale=2)
+                        chunk_size_input = gr.Number(label=i18n("Chunk Size"), value=70000, precision=0, scale=2)
                     
                     # Update listeners with logic to hide/show API key
                     def update_ai_ui(backend):
@@ -354,21 +443,21 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         # Definições padrão para evitar que fiquem vazios
                         new_choices = []
                         new_val = ""
-                        new_chunk = 20000
+                        new_chunk = 70000
                         
                         if backend == "gemini":
                             new_choices = GEMINI_MODELS
                             new_val = GEMINI_MODELS[1]
-                            new_chunk = 20000
+                            new_chunk = 70000
                         elif backend == "g4f":
                             new_choices = G4F_MODELS
-                            new_val = G4F_MODELS[0]
-                            new_chunk = 3000
+                            new_val = G4F_MODELS[5]
+                            new_chunk = 70000
                         elif backend == "local":
                             models = get_local_models()
-                            new_choices = models if models else ["No models found"]
+                            new_choices = models if models else [i18n("No models found")]
                             new_val = new_choices[0]
-                            new_chunk = 15000
+                            new_chunk = 30000
                         else: # Manual
                              pass
 
@@ -381,7 +470,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
 
                     def refresh_local_models():
                         models = get_local_models()
-                        val = models[0] if models else "No models found"
+                        val = models[0] if models else i18n("No models found")
                         return gr.update(choices=models, value=val)
 
                     refresh_models_btn.click(refresh_local_models, outputs=ai_model_input)
@@ -394,13 +483,14 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     with gr.Row():
                         face_mode_input = gr.Dropdown(choices=[(i18n("Auto"), "auto"), ("1", "1"), ("2", "2")], label=i18n("Face Mode"), value="auto")
                         face_detect_interval_input = gr.Textbox(label=i18n("Face Det. Interval"), value="0.17,1.0")
+                        no_face_mode_input = gr.Dropdown(choices=[(i18n("Padding (9:16)"), "padding"), (i18n("Zoom (Center)"), "zoom")], label=i18n("No Face Fallback"), value="zoom")
                     
                     
                     # Update listeners now that all components are defined
-                    input_source.change(on_source_change, inputs=input_source, outputs=[url_input, project_selector, workflow_input])
+                    input_source.change(on_source_change, inputs=input_source, outputs=[url_input, project_selector, video_upload, workflow_input])
              
              with gr.Accordion(i18n("Advanced Face Settings"), open=False):
-                 face_preset_input = gr.Dropdown(choices=list(FACE_PRESETS.keys()), label=i18n("Configuration Presets"), value="Default (Balanced)", interactive=True)
+                 face_preset_input = gr.Dropdown(choices=[(i18n(k), k) for k in FACE_PRESETS.keys()], label=i18n("Configuration Presets"), value="Default (Balanced)", interactive=True)
                  with gr.Row():
                       face_filter_thresh_input = gr.Slider(label=i18n("Ignore Small Faces (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.35, step=0.05, info=i18n("Relative size to ignore background."))
                       face_two_thresh_input = gr.Slider(label=i18n("Threshold for 2 Faces (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.60, step=0.05, info=i18n("Size of 2nd face to activate split mode."))
@@ -410,7 +500,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                  face_preset_input.change(apply_face_preset, inputs=face_preset_input, outputs=[face_filter_thresh_input, face_two_thresh_input, face_conf_thresh_input, face_dead_zone_input])
 
                  with gr.Accordion(i18n("Experimental: Active Speaker & Motion"), open=False):
-                        experimental_preset_input = gr.Dropdown(choices=list(EXPERIMENTAL_PRESETS.keys()), label=i18n("Configuration Presets"), value="Default (Off)", interactive=True)
+                        experimental_preset_input = gr.Dropdown(choices=[(i18n(k), k) for k in EXPERIMENTAL_PRESETS.keys()], label=i18n("Configuration Presets"), value="Default (Off)", interactive=True)
                         focus_active_speaker_input = gr.Checkbox(label=i18n("Experimental: Focus on Speaker"), value=False, info=i18n("Tries to focus only on the speaking person instead of split screen."))
                         with gr.Row():
                             active_speaker_mar_input = gr.Slider(label=i18n("MAR Threshold (Mouth Open)"), minimum=0.01, maximum=0.20, value=0.03, step=0.005, info=i18n("Mouth open sensitivity."))
@@ -426,7 +516,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
 
                         experimental_preset_input.change(apply_experimental_preset, inputs=experimental_preset_input, outputs=[focus_active_speaker_input, active_speaker_mar_input, active_speaker_score_diff_input, include_motion_input, active_speaker_motion_threshold_input, active_speaker_motion_sensitivity_input, active_speaker_decay_input])
              with gr.Accordion(i18n("Subtitle Settings (alpha)"), open=False):
-                preset_input = gr.Dropdown(choices=[(i18n("Manual"), "Manual")] + [(k, k) for k in subs.SUBTITLE_PRESETS.keys()], label=i18n("Quick Presets"), value="Hormozi (Classic)")
+                preset_input = gr.Dropdown(choices=[(i18n("Manual"), "Manual")] + [(i18n(k), k) for k in subs.SUBTITLE_PRESETS.keys()], label=i18n("Quick Presets"), value="Hormozi (Classic)")
                 use_custom_subs = gr.Checkbox(label=i18n("Enable Subtitle Customization (Includes Preset)"), value=True)
                 
                 # Previews (Always Visible)
@@ -510,7 +600,25 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                 function() {
                     var ta = document.querySelector('#logs_output textarea');
                     if(ta) {
-                        ta.scrollTop = ta.scrollHeight;
+                        // Setup scroll listener once to track user intent
+                        if (!ta._scrollerSetup) {
+                            ta._isSticky = true; // Default to sticky
+                            ta.addEventListener('scroll', function() {
+                                var diff = ta.scrollHeight - ta.scrollTop - ta.clientHeight;
+                                // If near bottom (<50px), enable sticky. Else disable.
+                                if (diff <= 50) {
+                                     ta._isSticky = true;
+                                } else {
+                                     ta._isSticky = false;
+                                }
+                            });
+                            ta._scrollerSetup = true;
+                        }
+                        
+                        // Apply scroll only if sticky
+                        if(ta._isSticky === undefined || ta._isSticky === true) {
+                            ta.scrollTop = ta.scrollHeight;
+                        }
                     }
                 }
              """)
@@ -518,9 +626,9 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
              
              # MUST pass all all new inputs to the run function
              start_btn.click(run_viral_cutter, inputs=[
-                 input_source, project_selector, url_input, segments_input, viral_input, themes_input, min_dur_input, max_dur_input, 
+                 input_source, project_selector, url_input, video_upload, segments_input, viral_input, themes_input, min_dur_input, max_dur_input, 
                  model_input, ai_backend_input, api_key_input, ai_model_input, chunk_size_input, 
-                 workflow_input, face_model_input, face_mode_input, face_detect_interval_input, 
+                 workflow_input, face_model_input, face_mode_input, face_detect_interval_input, no_face_mode_input, 
                  face_filter_thresh_input, face_two_thresh_input, face_conf_thresh_input, face_dead_zone_input, focus_active_speaker_input, 
                  active_speaker_mar_input, active_speaker_score_diff_input, include_motion_input, active_speaker_motion_threshold_input, active_speaker_motion_sensitivity_input, active_speaker_decay_input,
                  use_custom_subs, 
@@ -690,7 +798,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     subprocess.Popen(cmd, cwd=WORKING_DIR)
                     return i18n("Render All started in background... Check terminal/logs.")
                 except Exception as e:
-                    return f"Error starting render: {e}"
+                    return i18n("Error starting render: {}").format(e)
 
             editor_render_all_btn.click(
                 render_all, 
@@ -718,7 +826,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                 {i18n('Apoie o projeto, qualquer valor é bem-vindo:')} 
                 <a href='https://nubank.com.br/pagar/1ls6a4/0QpSSbWBSq' target='_blank'><strong>{i18n('Apoiar via PIX')}</strong></a>
                 <br>
-                {i18n('100% local • open source • sem assinatura')} 
+                {i18n('100% local • open source • no subscription required')} 
             </p>
         </div>
         """)

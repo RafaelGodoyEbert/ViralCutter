@@ -255,6 +255,7 @@ def render_specific_video(json_full_path):
              config_path = None
         
         config = main_improved.get_subtitle_config(config_path)
+        # print(f"DEBUG: Loaded subt config: H={config.get('highlight_color')} B={config.get('base_color')}")
         # Ensure 'uppercase' exists as it's not in default config of main_improved
         config['uppercase'] = config.get('uppercase', False)
         

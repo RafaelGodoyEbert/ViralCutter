@@ -1,5 +1,11 @@
 # Changelog
 
+## Fixes for Manual/Raw JSON Input
+
+### Core Functionality
+- **Raw Segment Repair**: Implemented automatic detection and repair of segments that lack timestamp information (e.g. manually crafted JSON with just reference tags). The system now recalculates start/end times using the transcript alignment logic.
+- **Duration Constraint Hardening**: The timestamp alignment logic now strictly enforces the user-defined `min_duration`, effectively extending segments that the AI might have outputted as too short.
+
 ## Suporte a GGUF e Ajustes de Link
 
 ### Novidades

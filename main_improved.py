@@ -81,9 +81,9 @@ def get_subtitle_config(config_path=None):
             with open(config_path, 'r', encoding='utf-8') as f:
                 loaded_config = json.load(f)
                 config.update(loaded_config)
-                print(f"Loaded subtitle config from {config_path}")
+                print(i18n("Loaded subtitle config from {}").format(config_path))
         except Exception as e:
-            print(f"Error loading subtitle config: {e}. Using defaults.")
+            print(i18n("Error loading subtitle config: {}. Using defaults.").format(e))
     
     return config
 
@@ -121,6 +121,7 @@ def main():
     parser.add_argument("--face-model", choices=["insightface", "mediapipe"], default="insightface", help="Face detection model")
     parser.add_argument("--face-mode", choices=["auto", "1", "2"], default="auto", help="Face tracking mode: auto, 1, 2")
     parser.add_argument("--subtitle-config", help="Path to subtitle configuration JSON file")
+    parser.add_argument("--no-face-mode", choices=["padding", "zoom"], default="padding", help="Method to handle segments with no face detected: 'padding' (9:16 frame with black bars) or 'zoom' (Center Crop Zoom)")
     parser.add_argument("--face-detect-interval", type=str, default="0.17,1.0", help="Face detection interval in seconds. Single value or 'interval_1face,interval_2face'")
     parser.add_argument("--face-filter-threshold", type=float, default=0.35, help="Relative area threshold to ignore background faces (default: 0.35)")
     parser.add_argument("--face-two-threshold", type=float, default=0.60, help="Relative area threshold to trigger 2-face mode (default: 0.60)")
@@ -250,7 +251,7 @@ def main():
         num_segments = args.segments
         if not num_segments:
             if args.skip_prompts:
-                print("No segments count provided and skip-prompts is ON. Using default 3.")
+                print(i18n("No segments count provided and skip-prompts is ON. Using default 3."))
                 num_segments = 3
             else:
                 num_segments = interactive_input_int("Enter the number of viral segments to create: ")
@@ -258,7 +259,7 @@ def main():
         viral_mode = args.viral
         if not args.viral and not args.themes:
             if args.skip_prompts:
-                print("Viral mode not set, defaulting to True.")
+                print(i18n("Viral mode not set, defaulting to True."))
                 viral_mode = True
             else:
                 response = input(i18n("Do you want viral mode? (yes/no): ")).lower()
@@ -303,7 +304,7 @@ def main():
 
         if not ai_backend:
             if args.skip_prompts:
-                print("No AI backend selected, defaulting to Manual.")
+                print(i18n("No AI backend selected, defaulting to Manual."))
                 ai_backend = "manual"
             else:
                 print("\n" + i18n("Select AI Backend for Viral Analysis:"))
@@ -340,10 +341,10 @@ def main():
                             if 0 <= m_idx < len(models):
                                 args.ai_model_name = models[m_idx] # Set global arg
                             else:
-                                print("Invalid selection. Using first model.")
+                                print(i18n("Invalid selection. Using first model."))
                                 args.ai_model_name = models[0]
                         except:
-                             print("Invalid input. Using first model.")
+                             print(i18n("Invalid input. Using first model."))
                              args.ai_model_name = models[0]
                              
                 else:
@@ -358,7 +359,7 @@ def main():
         
         if ai_backend == "gemini" and not api_key:
              if args.skip_prompts:
-                 print("Gemini API key missing, but skip-prompts is ON. Might fail.")
+                 print(i18n("Gemini API key missing, but skip-prompts is ON. Might fail."))
              else:
                  print(i18n("Gemini API Key not found in api_config.json or arguments."))
                  api_key = input(i18n("Enter your Gemini API Key: ")).strip()
@@ -487,6 +488,34 @@ def main():
                 
                 save_json.save_viral_segments(viral_segments, project_folder=project_folder) 
 
+        # 3.5. Fix Raw Segments (missing timestamps)
+        if workflow_choice != "3" and viral_segments and "segments" in viral_segments:
+            segs = viral_segments.get("segments", [])
+            if segs and len(segs) > 0:
+                 # Check first segment for duration 0 but having start_time_ref or just check duration
+                 first = segs[0]
+                 # If duration is effectively 0 and we have a ref tag (or even if we dont, we cant cut 0s video)
+                 # We assume if duration is 0, it is raw.
+                 if first.get("duration", 0) == 0:
+                      print(i18n("Detected raw AI segments without timestamps (Duration 0). Running alignment..."))
+                      try:
+                          # Load transcript
+                          transcript = create_viral_segments.load_transcript(project_folder)
+                          # Process (Align)
+                          # Use None for output_count to keep all found segments
+                          viral_segments = create_viral_segments.process_segments(
+                              segs, 
+                              transcript, 
+                              args.min_duration, 
+                              args.max_duration, 
+                              output_count=None 
+                          )
+                          save_json.save_viral_segments(viral_segments, project_folder=project_folder)
+                          print(i18n("Segments aligned and saved."))
+                      except Exception as e:
+                          print(i18n("Failed to align raw segments: {}").format(e))
+                          # If alignment fails, it might crash later, but we tried. 
+
         # 4. Cut Segments
         # Se workflow for 3, pulamos corte
         if workflow_choice == "3":
@@ -547,7 +576,8 @@ def main():
                 active_speaker_motion_deadzone=args.active_speaker_motion_threshold,
                 active_speaker_motion_sensitivity=args.active_speaker_motion_sensitivity,
                 active_speaker_decay=args.active_speaker_decay,
-                segments_data=viral_segments.get("segments", []) if viral_segments else None
+                segments_data=viral_segments.get("segments", []) if viral_segments else None,
+                no_face_mode=args.no_face_mode
             )
 
 
@@ -559,7 +589,7 @@ def main():
                  final_folder = os.path.join(project_folder, "final")
                  subs_folder = os.path.join(project_folder, "subs")
                  
-                 print("Renaming existing files with titles...")
+                 print(i18n("Renaming existing files with titles..."))
                  for idx, segment in enumerate(segments_data):
                      title = segment.get("title", f"Segment_{idx}")
                      safe_title = "".join([c for c in title if c.isalnum() or c in " _-"]).strip()

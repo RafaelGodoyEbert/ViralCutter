@@ -3,6 +3,16 @@ import os
 import re
 import sys
 import time
+import ast
+import io
+
+# Configura stdout para evitar erros de encoding no Windows (substitui caracteres inválidos por ?)
+if sys.stdout and hasattr(sys.stdout, 'buffer'):
+    try:
+        # Mantém encoding original mas ignora erros (substitui por ?)
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding=sys.stdout.encoding or 'utf-8', errors='replace', line_buffering=True)
+    except:
+        pass
 
 # Tenta importar bibliotecas de IA opcionalmente
 try:
@@ -11,6 +21,9 @@ try:
 except ImportError:
     HAS_GEMINI = False
 
+try:
+    import g4f
+    HAS_G4F = True
 except ImportError:
     HAS_G4F = False
 
@@ -21,37 +34,144 @@ except ImportError:
     HAS_LLAMA_CPP = False
 
 def clean_json_response(response_text):
-    """Limpa blocos de código markdown do texto de resposta."""
+    """
+    Limpa a resposta focando em encontrar o objeto JSON que contém a chave "segments".
+    Estratégia: 
+    1. Busca a palavra "segments", encontra o '{' anterior e usa raw_decode.
+    2. Fallback: Parsear lista de segmentos item a item (recuperação de JSON truncado).
+    """
+    if not isinstance(response_text, str):
+        response_text = str(response_text)
+    
     if not response_text:
         return {"segments": []}
-    # Remove ```json ... ```
-    # First, try to remove ```json ... ``` or just ``` ... ```
-    pattern = r"```json(.*?)```"
-    match = re.search(pattern, response_text, re.DOTALL)
-    if match:
-        response_text = match.group(1)
-    else:
-        pattern_generic = r"```(.*?)```"
-        match_generic = re.search(pattern_generic, response_text, re.DOTALL)
-        if match_generic:
-            response_text = match_generic.group(1)
+
+    # 1. Limpeza preliminar
+    # Remove tags de pensamento (DeepSeek R1)
+    response_text = re.sub(r'<think>.*?</think>', '', response_text, flags=re.DOTALL)
+    
+    # Normaliza escapes excessivos (\n virando \\n) e aspas se parecer necessário
+    try:
+        if "\\n" in response_text or "\\\"" in response_text:
+             # Tenta um decode básico de escapes
+             response_text = response_text.replace("\\n", "\n").replace("\\\"", "\"").replace("\\'", "'")
+    except:
+        pass
+
+    # 2. Busca pela palavra-chave "segments"
+    # Procura índices de todas as ocorrências de 'segments'
+    matches = [m.start() for m in re.finditer(r'segments', response_text)]
+    
+    if not matches:
+        # Se não achou segments, retorna vazio
+        return {"segments": []}
+
+    # Tenta extrair JSON válido a partir de cada ocorrência
+    for match_idx in matches:
+        # Procura o '{' mais próximo ANTES de "segments"
+        # Limita busca a 5000 chars para trás para performance
+        start_search = max(0, match_idx - 5000)
+        snippet_before = response_text[start_search:match_idx]
+        
+        # Encontra o ÚLTIMO '{' no snippet
+        last_open_rel = snippet_before.rfind('{')
+        
+        if last_open_rel != -1:
+            real_start = start_search + last_open_rel
+            candidate_text = response_text[real_start:]
             
-    # Always attempt to extract from outermost curly braces, 
-    # as some models chatter before/after the code block
-    start_idx = response_text.find("{")
-    end_idx = response_text.rfind("}")
-    
-    if start_idx != -1 and end_idx != -1:
-         response_text = response_text[start_idx : end_idx + 1]
-    
-    return json.loads(response_text.strip())
+            # Tentativa A: json.raw_decode
+            try:
+                decoder = json.JSONDecoder()
+                obj, _ = decoder.raw_decode(candidate_text)
+                if 'segments' in obj and isinstance(obj['segments'], list):
+                    return obj
+            except:
+                pass
+            
+            # Tentativa B: ast.literal_eval
+            try:
+                balance = 0
+                in_string = False
+                escape = False
+                found_end = -1
+                
+                for i, char in enumerate(candidate_text):
+                    if escape:
+                        escape = False
+                        continue
+                    if char == '\\':
+                        escape = True
+                        continue
+                    if char == "'" or char == '"':
+                        in_string = not in_string
+                        continue
+                        
+                    if not in_string:
+                        if char == '{':
+                            balance += 1
+                        elif char == '}':
+                            balance -= 1
+                            if balance == 0:
+                                found_end = i
+                                break
+                
+                if found_end != -1:
+                    clean_cand = candidate_text[:found_end+1]
+                    obj = ast.literal_eval(clean_cand)
+                    if 'segments' in obj and isinstance(obj['segments'], list):
+                        return obj
+            except:
+                pass
+
+    # 3. Fallback: Extração bruta de markdown
+    try:
+        match = re.search(r"```json(.*?)```", response_text, re.DOTALL)
+        if match:
+            return json.loads(match.group(1))
+    except:
+        pass
+        
+    # 4. LAST RESORT: Fragment Parser (Para JSON truncado/incompleto)
+    # Procura por "segments": [ e tenta parsear item por item
+    try:
+        match_list = re.search(r'"segments"\s*:\s*\[', response_text)
+        if match_list:
+            start_pos = match_list.end()
+            current_pos = start_pos
+            found_segments = []
+            decoder = json.JSONDecoder()
+            
+            while True:
+                while current_pos < len(response_text) and response_text[current_pos] in ' \t\n\r,':
+                    current_pos += 1
+                
+                if current_pos >= len(response_text):
+                    break
+                    
+                if response_text[current_pos] == ']':
+                    break
+                
+                try:
+                    obj, end_pos = decoder.raw_decode(response_text[current_pos:])
+                    if isinstance(obj, dict):
+                        found_segments.append(obj)
+                    current_pos += end_pos
+                except json.JSONDecodeError:
+                    break
+                    
+            if found_segments:
+                print(f"[INFO] Recuperado {len(found_segments)} segmentos de JSON truncado.")
+                return {"segments": found_segments}
+    except:
+        pass
+
+    return {"segments": []}
 
 
 def preprocess_transcript_for_ai(segments):
     """
     Concatenates transcript segments into a single string with embedded time tags.
-    Tags are inserted at the beginning (0s) and roughly every 4 seconds thereafter.
-    Format: "Word word word (4s) word word..."
     """
     if not segments:
         return ""
@@ -68,10 +188,8 @@ def preprocess_transcript_for_ai(segments):
         text = seg.get('text', '').strip()
         end_time = seg.get('end', 0)
         
-        # Add text
         full_text += text + " "
         
-        # Add tag if ~4 seconds passed since last tag
         if end_time - last_tag_time >= 4:
             full_text += f"({int(end_time)}s) "
             last_tag_time = end_time
@@ -96,12 +214,11 @@ def call_gemini(prompt, api_key, model_name='gemini-2.5-flash-lite-preview-09-20
         except Exception as e:
             error_str = str(e)
             if "429" in error_str or "Quota exceeded" in error_str:
-                wait_time = base_wait * (attempt + 1) # Backoff default
+                wait_time = base_wait * (attempt + 1)
                 
-                # Try to find specific wait time in error message
                 match = re.search(r"retry in (\d+(\.\d+)?)s", error_str)
                 if match:
-                    wait_time = float(match.group(1)) + 5.0 # Add 5s buffer
+                    wait_time = float(match.group(1)) + 5.0
                 
                 print(f"[429] Quota Exceeded. Waiting {wait_time:.2f}s before retry {attempt+1}/{max_retries}...", flush=True)
                 time.sleep(wait_time)
@@ -117,25 +234,56 @@ def call_g4f(prompt, model_name="gpt-4o-mini"):
     if not HAS_G4F:
         raise ImportError("A biblioteca 'g4f' não está instalada. Instale com: pip install g4f")
     
-    try:
-        # Tenta usar um provider automático
-        response = g4f.ChatCompletion.create(
-            model=model_name,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response
-    except Exception as e:
-        print(f"Erro na API do G4F: {e}")
-        return "{}"
+    max_retries = 3
+    base_wait = 5
+    
+    for attempt in range(max_retries):
+        try:
+            response = g4f.ChatCompletion.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            
+            if isinstance(response, dict):
+                if 'error' in response:
+                    raise Exception(f"API Error: {response['error']}")
+                if 'choices' in response and isinstance(response['choices'], list):
+                    if len(response['choices']) > 0:
+                         content = response['choices'][0].get('message', {}).get('content', '')
+                         if content:
+                             return content
+                if not response:
+                     raise ValueError("Empty Dict response")
 
-def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode="manual", api_key=None, project_folder="tmp", chunk_size_arg=None, model_name_arg=None):
-    quantidade_de_virals = num_segments
+                return json.dumps(response)
 
-    # Ler transcrição
+            if not response:
+                print(f"[WARN] G4F retornou resposta vazia. Tentativa {attempt+1}/{max_retries}")
+                time.sleep(base_wait)
+                continue
+            
+            if isinstance(response, str):
+                return response
+
+            try:
+                return json.dumps(response, ensure_ascii=False)
+            except:
+                return str(response)
+            
+        except Exception as e:
+            print(f"[WARN] Erro na API do G4F (Tentativa {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                wait_time = base_wait * (2 ** attempt)
+                time.sleep(wait_time)
+            
+    print(f"Falha crítica após {max_retries} tentativas no G4F.")
+    return "{}"
+
+def load_transcript(project_folder):
+    """Parses input.tsv or input.srt from the project folder."""
     input_tsv = os.path.join(project_folder, 'input.tsv')
     input_srt = os.path.join(project_folder, 'input.srt')
 
-    # Parse Input into Segments first
     transcript_segments = []
     
     # Try to load TSV first (more reliable time)
@@ -162,8 +310,6 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
     if not transcript_segments and os.path.exists(input_srt):
          with open(input_srt, 'r', encoding='utf-8') as f:
              srt_content = f.read()
-         # Simple SRT Regex Parser
-         # Matches: index, time range, text
          pattern = re.compile(r'(\d+)\n(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})\n((?:(?!\n\n).)*)', re.DOTALL)
          matches = pattern.findall(srt_content)
          
@@ -179,11 +325,187 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
 
     if not transcript_segments:
         raise ValueError("Could not parse transcript from TSV or SRT.")
-
-    # Generate Pre-processed Content with Time Tags
-    formatted_content = preprocess_transcript_for_ai(transcript_segments)
     
-    # Use formatted content for chunking
+    return transcript_segments
+
+def process_segments(raw_segments, transcript_segments, min_duration, max_duration, output_count=None):
+    """
+    Aligns raw AI segments (with reference tags) to actual transcript timestamps.
+    Applies constraints, validation, and deduplication.
+    """
+    
+    all_segments = raw_segments
+    tempo_minimo = min_duration
+    tempo_maximo = max_duration
+    
+    # Sort segments by score (descending)
+    try:
+        all_segments.sort(key=lambda x: int(x.get('score', 0)), reverse=True)
+    except:
+        pass
+
+    # --- POST-PROCESSING: Match Text to Timestamps ---
+    processed_segments = []
+    
+    print(f"[DEBUG] Matching {len(all_segments)} raw segments to timestamps...")
+    
+    for seg in all_segments:
+        try:
+            # 1. Parse Reference Time
+            ref_time_str = seg.get('start_time_ref', '(0s)')
+            ref_time_val = 0
+            try:
+                if isinstance(ref_time_str, str):
+                    match = re.search(r'\d+', ref_time_str)
+                    if match:
+                         ref_time_val = int(match.group())
+                else:
+                    ref_time_val = int(ref_time_str)
+            except:
+                ref_time_val = 0
+                
+            # Find segment index closest to ref_time
+            start_idx = 0
+            min_diff = 999999
+            for i, s in enumerate(transcript_segments):
+                diff = abs(s['start'] - ref_time_val)
+                if diff < min_diff:
+                    min_diff = diff
+                    start_idx = i
+                if s['start'] > ref_time_val + 10: 
+                    break
+            
+            # Backtrack
+            start_idx = max(0, start_idx - 5)
+            
+            # 2. Find Exact Start Text
+            start_text_target = seg.get('start_text', '').lower().strip()
+            # Normalize
+            start_text_target = re.sub(r'[^\w\s]', '', start_text_target)
+            
+            final_start_time = -1
+            match_start_idx = -1
+            
+            # Search window
+            search_limit = min(len(transcript_segments), start_idx + 50)
+            
+            for i in range(start_idx, search_limit):
+                s_text = transcript_segments[i]['text'].lower()
+                s_text = re.sub(r'[^\w\s]', '', s_text)
+                
+                # Check for partial match
+                if start_text_target and (start_text_target in s_text or s_text in start_text_target):
+                    final_start_time = transcript_segments[i]['start']
+                    match_start_idx = i
+                    break
+            
+            # Fallback
+            if final_start_time == -1:
+                final_start_time = transcript_segments[start_idx]['start'] if start_idx < len(transcript_segments) else ref_time_val
+                match_start_idx = start_idx
+
+            # 3. Find End Text
+            end_text_target = seg.get('end_text', '').lower().strip()
+            end_text_target = re.sub(r'[^\w\s]', '', end_text_target)
+            
+            final_end_time = -1
+            
+            if match_start_idx != -1:
+                search_end_limit = min(len(transcript_segments), match_start_idx + 200)
+                
+                for i in range(match_start_idx, search_end_limit):
+                    s_text = transcript_segments[i]['text'].lower()
+                    s_text = re.sub(r'[^\w\s]', '', s_text)
+                    
+                    if end_text_target and (end_text_target in s_text or s_text in end_text_target):
+                         final_end_time = transcript_segments[i]['end']
+                         break
+            
+            # Fallback End Time
+            if final_end_time == -1:
+                 final_end_time = final_start_time + tempo_minimo 
+            
+            # Calculate Duration
+            duration = final_end_time - final_start_time
+            
+            # Validate Duration (Min)
+            if duration < tempo_minimo: 
+                print(f"[WARN] Segmento menor que duration min ({duration:.2f}s < {tempo_minimo}s). Estendendo para {tempo_minimo}s.")
+                duration = tempo_minimo
+                final_end_time = final_start_time + duration
+            
+            # Validate Duration (Max)
+            if duration > tempo_maximo:
+                print(f"[WARN] Segmento excede max duration ({duration:.2f}s > {tempo_maximo}s). Cortando para {tempo_maximo}s.")
+                final_end_time = final_start_time + tempo_maximo
+                duration = tempo_maximo
+
+            # Construct Final Segment
+            processed_segments.append({
+                "title": seg.get('title', 'Viral Segment'),
+                "start_time": final_start_time,
+                "end_time": final_end_time,
+                "hook": seg.get('title', ''), 
+                "reasoning": seg.get('reasoning', ''),
+                "score": seg.get('score', 0),
+                "duration": duration
+            })
+
+        except Exception as e:
+            print(f"[WARN] Error processing segment {seg}: {e}")
+            continue
+
+    # Deduplication
+    unique_segments = []
+    processed_segments.sort(key=lambda x: int(x.get('score', 0)), reverse=True)
+    
+    for candidate in processed_segments:
+        is_dup = False
+        for existing in unique_segments:
+            s1, e1 = candidate['start_time'], candidate['end_time']
+            # Simple float equality isn't safe, but max/min handles it
+            s2, e2 = existing['start_time'], existing['end_time']
+            
+            overlap_start = max(s1, s2)
+            overlap_end = min(e1, e2)
+            
+            if overlap_end > overlap_start:
+                intersection = overlap_end - overlap_start
+                if intersection > 5: # more than 5 seconds overlap
+                    is_dup = True
+                    print(f"[DEBUG] Dropping overlap: '{candidate.get('title')}' ({s1:.1f}-{e1:.1f}) overlaps with '{existing.get('title')}' ({s2:.1f}-{e2:.1f}) by {intersection:.1f}s")
+                    break
+        if not is_dup:
+            unique_segments.append(candidate)
+
+    all_segments = unique_segments
+    print(f"[DEBUG] Finished processing. {len(all_segments)} segments valid.")
+
+    if output_count and len(all_segments) > output_count:
+        print(f"Filtrando os top {output_count} segmentos de {len(all_segments)} candidatos encontrados nos chunks.")
+        all_segments = all_segments[:output_count]
+
+    final_result = {"segments": all_segments}
+    
+    # Validação básica de que temos start_time
+    validated_segments = []
+    for seg in final_result['segments']:
+        if 'start_time' in seg:
+             validated_segments.append(seg)
+    
+    final_result['segments'] = validated_segments
+    
+    return final_result
+
+
+def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode="manual", api_key=None, project_folder="tmp", chunk_size_arg=None, model_name_arg=None):
+    quantidade_de_virals = num_segments
+
+    # 1. Load Transcript
+    transcript_segments = load_transcript(project_folder)
+
+    # 2. Pre-process Content
+    formatted_content = preprocess_transcript_for_ai(transcript_segments)
     content = formatted_content
 
     # Load Config and Prompt
@@ -191,7 +513,6 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
     config_path = os.path.join(base_dir, 'api_config.json')
     prompt_path = os.path.join(base_dir, 'prompt.txt')
 
-    # Default Config
     config = {
         "selected_api": "gemini",
         "gemini": {
@@ -209,38 +530,31 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 loaded_config = json.load(f)
-                # Merge simples
                 if "gemini" in loaded_config: config["gemini"].update(loaded_config["gemini"])
                 if "g4f" in loaded_config: config["g4f"].update(loaded_config["g4f"])
                 if "selected_api" in loaded_config: config["selected_api"] = loaded_config["selected_api"]
         except Exception as e:
-            print(f"Erro ao ler api_config.json: {e}. Usando padrões.")
+            print(f"Erro ao ler api_config.json: {e}")
 
-    # Configurar variaveis baseadas no ai_mode
-    current_chunk_size = 15000 # default fallback
+    # Config Vars
+    current_chunk_size = 15000
     model_name = ""
     
     if ai_mode == "gemini":
         cfg_chunk = config["gemini"].get("chunk_size", 15000)
         current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else cfg_chunk
-        
         cfg_model = config["gemini"].get("model", "gemini-2.5-flash-lite-preview-09-2025")
         model_name = model_name_arg if model_name_arg else cfg_model
-        
-        if not api_key: # Se não veio por argumento, tenta do config
-            api_key = config["gemini"].get("api_key", "")
+        if not api_key: api_key = config["gemini"].get("api_key", "")
             
     elif ai_mode == "g4f":
         cfg_chunk = config["g4f"].get("chunk_size", 2000)
         current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else cfg_chunk
-        
         cfg_model = config["g4f"].get("model", "gpt-4o-mini")
         model_name = model_name_arg if model_name_arg else cfg_model
 
     elif ai_mode == "local":
-        # For local, chunk size default 3000 chars roughly matches 1024-2048 tokens depending on chars/token
         current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else 3000
-        # Model name is just the argument (filename)
         model_name = model_name_arg if model_name_arg else ""
 
     system_prompt_template = ""
@@ -248,12 +562,11 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
         with open(prompt_path, 'r', encoding='utf-8') as f:
             system_prompt_template = f.read()
     else:
-        # Fallback se arquivo nao existir
         print("Aviso: prompt.txt não encontrado. Usando prompt interno.")
         system_prompt_template = """You are a World-Class Viral Video Editor.
 {context_instruction}
 Analyze the transcript below with time tags (XXs). Find {amount} viral segments.
-Constraints: {min_duration}s - {max_duration}s.
+Constraints: Each segment MUST be between {min_duration} seconds and {max_duration} seconds.
 IMPORTANT: Output "Title", "Hook", and "Reasoning" in the SAME LANGUAGE as the transcript (e.g., if transcript is Portuguese, output Portuguese).
 TRANSCRIPT:
 {transcript_chunk}
@@ -276,11 +589,8 @@ OUTPUT JSON ONLY:
             }
         '''
 
-    # Split content into chunks
-    # Split content into chunks with OVERLAP
+    # Chunking
     chunk_size = int(current_chunk_size)
-    
-    # Define overlap size (e.g. 10% of chunk size or min 1000 chars)
     overlap_size = max(1000, int(chunk_size * 0.1))
     
     chunks = []
@@ -291,27 +601,16 @@ OUTPUT JSON ONLY:
 
     while start < content_len:
         end = min(start + chunk_size, content_len)
-        
-        # Align End to newline to avoid cutting sentences is useless here since we process raw text line.
-        # But our `formatted_content` has newlines from preprocess? Actually `preprocess_transcript_for_ai` concats with " ".
-        # So we look for space.
-        
         if end < content_len:
             last_space = content.rfind(' ', start, end)
             if last_space != -1 and last_space > start:
                 end = last_space
-        
         chunk_text = content[start:end]
-        if chunk_text.strip(): # Avoid empty chunks
+        if chunk_text.strip():
             chunks.append(chunk_text)
-        
         if end >= content_len:
             break
-            
-        # Prepare start for next chunk (Backtrack by overlap)
         next_start = max(start + 1, end - overlap_size)
-        
-        # Align next_start to space
         safe_space = content.rfind(' ', start, next_start)
         if safe_space != -1:
             start = safe_space + 1
@@ -329,7 +628,6 @@ OUTPUT JSON ONLY:
         if len(chunks) > 1:
             context_instruction = f"Part {i+1} of {len(chunks)}. "
         
-        # Preencher o template
         try:
             prompt = system_prompt_template.format(
                 context_instruction=context_instruction,
@@ -338,12 +636,9 @@ OUTPUT JSON ONLY:
                 max_duration=tempo_maximo,
                 transcript_chunk=chunk,
                 json_template=json_template,
-                amount=quantidade_de_virals # Caso o user use {amount} no txt
+                amount=quantidade_de_virals
             )
         except KeyError as e:
-            # Fallback se o user bagunçou o txt e esqueceu chaves ou colocou chaves erradas
-            # Tenta um replace manual basico ou avisa erro, mas ideal é não quebrar.
-            # Vamos usar replace seguro
             prompt = system_prompt_template
             prompt = prompt.replace("{context_instruction}", context_instruction)
             prompt = prompt.replace("{virality_instruction}", virality_instruction)
@@ -355,31 +650,26 @@ OUTPUT JSON ONLY:
 
         output_texts.append(prompt)
 
-    # --- Save Full Prompt for Reference ---
     try:
         full_prompt_path = os.path.join(project_folder, "prompt_full.txt")
-        # Prepare full prompt using replace to be safe
         full_prompt = system_prompt_template
         full_prompt = full_prompt.replace("{context_instruction}", "Full Video Transcript Analysis")
         full_prompt = full_prompt.replace("{virality_instruction}", virality_instruction)
         full_prompt = full_prompt.replace("{min_duration}", str(tempo_minimo))
         full_prompt = full_prompt.replace("{max_duration}", str(tempo_maximo))
-        full_prompt = full_prompt.replace("{transcript_chunk}", content) # Full Content
+        full_prompt = full_prompt.replace("{transcript_chunk}", content) 
         full_prompt = full_prompt.replace("{json_template}", json_template)
         full_prompt = full_prompt.replace("{amount}", str(quantidade_de_virals))
         
         with open(full_prompt_path, "w", encoding="utf-8") as f:
             f.write(full_prompt)
-        # print(f"[INFO] Full reference prompt saved to: {full_prompt_path}")
     except Exception as e:
         print(f"[WARN] Could not save prompt_full.txt: {e}")
-    # -------------------------------------
 
-    all_segments = []
+    all_raw_segments = []
 
     print(f"Processando {len(output_texts)} chunks usando modo: {ai_mode.upper()}")
 
-    # Initialize Local Model if needed (Once)
     local_llm_instance = None
     if ai_mode == "local":
         if not HAS_LLAMA_CPP:
@@ -387,10 +677,9 @@ OUTPUT JSON ONLY:
             return {"segments": []}
             
         models_dir = os.path.join(base_dir, 'models')
-        # Check if model_name is full path or filename
         model_path = os.path.join(models_dir, model_name)
         if not os.path.exists(model_path):
-             if os.path.exists(model_name): # Absolute path check
+             if os.path.exists(model_name):
                  model_path = model_name
              else:
                  print(f"Error: Model not found at {model_path}")
@@ -398,7 +687,6 @@ OUTPUT JSON ONLY:
         
         print(f"[INFO] Loading Local Model: {os.path.basename(model_path)} (This may take a while)...")
         try:
-            # Adjust n_gpu_layers=-1 for max GPU usage. n_ctx=8192 for long context.
             local_llm_instance = Llama(
                 model_path=model_path,
                 n_gpu_layers=-1, 
@@ -411,8 +699,6 @@ OUTPUT JSON ONLY:
 
     for i, prompt in enumerate(output_texts):
         response_text = ""
-        
-        # Always save prompt to file (Manual, Gemini, or G4F)
         manual_prompt_path = os.path.join(project_folder, f"prompt_part_{i+1}.txt")
         try:
             with open(manual_prompt_path, "w", encoding="utf-8") as f:
@@ -422,7 +708,6 @@ OUTPUT JSON ONLY:
         
         if ai_mode == "manual":
             print(f"\n[INFO] O prompt foi salvo em: {manual_prompt_path}")
-            
             print("\n" + "="*60)
             print(f"CHUNK {i+1}/{len(output_texts)}")
             print("="*60)
@@ -446,11 +731,10 @@ OUTPUT JSON ONLY:
                     print(f"Arquivo {response_json_path} não encontrado.")
             else:
                 response_text = user_input
-                # Tenta ler mais linhas se parecer incompleto (bruteforce simples)
                 if response_text.strip().startswith("{") and not response_text.strip().endswith("}"):
                     print("Parece incompleto. Cole o resto e dê Enter (ou Ctrl+C para cancelar):")
                     try:
-                        rest = sys.stdin.read() # Isso pode travar no Windows sem EOF explícito
+                        rest = sys.stdin.read() 
                         response_text += rest
                     except:
                         pass
@@ -458,15 +742,12 @@ OUTPUT JSON ONLY:
         elif ai_mode == "gemini":
             print(f"Enviando chunk {i+1} para o Gemini (Model: {model_name})...")
             response_text = call_gemini(prompt, api_key, model_name=model_name)
-        
         elif ai_mode == "g4f":
             print(f"Enviando chunk {i+1} para o G4F (Model: {model_name})...")
             response_text = call_g4f(prompt, model_name=model_name)
-            
         elif ai_mode == "local" and local_llm_instance:
             print(f"Processing chunk {i+1} with Local LLM...")
             try:
-                # Use chat completion for better formatting handling
                 output = local_llm_instance.create_chat_completion(
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant that outputs only JSON."},
@@ -488,214 +769,23 @@ OUTPUT JSON ONLY:
             print(f"[DEBUG] Raw response saved to: {raw_response_path}")
         except Exception as e:
             print(f"[WARN] Failed to save raw response: {e}")
-        # ----------------------------------------
 
         # Processar resposta
         try:
             data = clean_json_response(response_text)
             chunk_segments = data.get("segments", [])
             print(f"Encontrados {len(chunk_segments)} segmentos neste chunk.")
-            all_segments.extend(chunk_segments)
+            all_raw_segments.extend(chunk_segments)
         except json.JSONDecodeError:
-            print(f"Erro: Resposta inválida (não é JSON válida).")
-            print(f"Conteúdo recebido (primeiros 100 chars): {response_text[:100]}...")
+            print(f"Erro: Resposta inválida.")
         except Exception as e:
             print(f"Erro desconhecido ao processar chunk: {e}")
 
-    # Sort segments by score (descending) to get the best ones globally
-    try:
-        all_segments.sort(key=lambda x: int(x.get('score', 0)), reverse=True)
-    except:
-        pass # If scores are not valid integers, skip sorting or rely on order
-
-    # --- POST-PROCESSING: Match Text to Timestamps ---
-    processed_segments = []
-    
-    # Helper to find text in segments
-    def find_timestamp_by_text(target_text, segments_list, start_search_idx=0, is_end=False):
-        # Normalize target
-        target_clean = "".join(target_text.lower().split())
-        if not target_clean: return None, start_search_idx
-
-        current_concat = ""
-        param_idx = -1
-        
-        # Sliding window or simple linear scan?
-        # Linear scan matches sequences of words.
-        # We look for the FIRST occurrence of target_text in segments_list starting from start_search_idx
-        
-        # Optimization: Create a long string of remaining segments and find index, then map back?
-        # Better: iterate segments.
-        
-        for i in range(start_search_idx, len(segments_list)):
-            seg_text = segments_list[i]['text']
-            # We treat this simple: check if target is basically inside this segment or spanning a few.
-            # Since target is "5-10 words", it might span 2 segments.
-            
-            # Simple approach: Check if target (normalized) is substring of 
-            # (prev + current + next) normalized.
-            # This is complex. 
-            
-            # SIMPLER APPROACH:
-            # The AI returns 'start_time_ref' (e.g., "(12s)").
-            # We jump to that time in segments_list.
-            # Then we look for the text in that vicinity.
-            pass
-        
-        return None, -1
-
-    # SIMPLIFIED MATCHING LOGIC
-    # 1. Use 'start_time_ref' to find approximate index.
-    # 2. Search locally for 'start_text'.
-    # 3. Search forward for 'end_text'.
-    
-    print(f"[DEBUG] Matching {len(all_segments)} raw segments to timestamps...")
-    
-    for seg in all_segments:
-        try:
-            # 1. Parse Reference Time
-            ref_time_str = seg.get('start_time_ref', '(0s)')
-            ref_time_val = 0
-            try:
-                ref_time_val = int(re.search(r'\d+', ref_time_str).group())
-            except:
-                ref_time_val = 0
-                
-            # Find segment index closest to ref_time
-            start_idx = 0
-            min_diff = 999999
-            for i, s in enumerate(transcript_segments):
-                diff = abs(s['start'] - ref_time_val)
-                if diff < min_diff:
-                    min_diff = diff
-                    start_idx = i
-                if s['start'] > ref_time_val + 10: # Stop if we went too far
-                    break
-            
-            # Backtrack a bit in case Ref was slightly off or text started earlier
-            start_idx = max(0, start_idx - 5)
-            
-            # 2. Find Exact Start Text
-            start_text_target = seg.get('start_text', '').lower().strip()
-            # Normalize: remove punctuation
-            start_text_target = re.sub(r'[^\w\s]', '', start_text_target)
-            
-            final_start_time = -1
-            match_start_idx = -1
-            
-            # Search window: forward 50 segments
-            search_limit = min(len(transcript_segments), start_idx + 50)
-            
-            for i in range(start_idx, search_limit):
-                s_text = transcript_segments[i]['text'].lower()
-                s_text = re.sub(r'[^\w\s]', '', s_text)
-                
-                # Check for partial match (start of sentence)
-                if start_text_target and (start_text_target in s_text or s_text in start_text_target):
-                    final_start_time = transcript_segments[i]['start']
-                    match_start_idx = i
-                    break
-            
-            # Fallback: use Ref Time if text match fails
-            if final_start_time == -1:
-                final_start_time = transcript_segments[start_idx]['start'] if start_idx < len(transcript_segments) else ref_time_val
-                match_start_idx = start_idx
-
-            # 3. Find End Text (starting from match_start_idx)
-            end_text_target = seg.get('end_text', '').lower().strip()
-            end_text_target = re.sub(r'[^\w\s]', '', end_text_target)
-            
-            final_end_time = -1
-            
-            if match_start_idx != -1:
-                # Search forward for end text, extended range
-                # Use a larger window but we will sanity check duration later
-                search_end_limit = min(len(transcript_segments), match_start_idx + 200)
-                
-                for i in range(match_start_idx, search_end_limit):
-                    s_text = transcript_segments[i]['text'].lower()
-                    s_text = re.sub(r'[^\w\s]', '', s_text)
-                    
-                    if end_text_target and (end_text_target in s_text or s_text in end_text_target):
-                         final_end_time = transcript_segments[i]['end']
-                         break
-            
-            # Fallback End Time checking Duration
-            if final_end_time == -1:
-                 final_end_time = final_start_time + tempo_minimo # safe default
-            
-            # Calculate Duration
-            duration = final_end_time - final_start_time
-            
-            # Validate Duration (Min)
-            if duration < 5: 
-                duration = tempo_minimo
-                final_end_time = final_start_time + duration
-            
-            # Validate Duration (Max)
-            # If AI selected start and end points that result in a huge segment, clamp it.
-            if duration > tempo_maximo:
-                print(f"[WARN] Segmento excede max duration ({duration:.2f}s > {tempo_maximo}s). Cortando para {tempo_maximo}s.")
-                final_end_time = final_start_time + tempo_maximo
-                duration = tempo_maximo
-
-            # Construct Final Segment
-            processed_segments.append({
-                "title": seg.get('title', 'Viral Segment'),
-                "start_time": final_start_time,
-                "end_time": final_end_time,
-                "hook": seg.get('title', ''), # Use title as hook text
-                "reasoning": seg.get('reasoning', ''),
-                "score": seg.get('score', 0),
-                "duration": duration
-            })
-
-        except Exception as e:
-            print(f"[WARN] Error processing segment {seg}: {e}")
-            continue
-
-    # Deduplication (Keep highest score)
-    unique_segments = []
-    # Sort by Score desc
-    processed_segments.sort(key=lambda x: int(x.get('score', 0)), reverse=True)
-    
-    for candidate in processed_segments:
-        is_dup = False
-        for existing in unique_segments:
-            s1, e1 = candidate['start_time'], candidate['end_time']
-            s2, e2 = existing['start_time'], existing['end_time']
-            
-            overlap_start = max(s1, s2)
-            overlap_end = min(e1, e2)
-            
-            if overlap_end > overlap_start:
-                intersection = overlap_end - overlap_start
-                if intersection > 5: # more than 5 seconds overlap
-                    is_dup = True
-                    break
-        if not is_dup:
-            unique_segments.append(candidate)
-
-    all_segments = unique_segments
-    print(f"[DEBUG] Finished processing. {len(all_segments)} segments valid.")
-    # ---------------------------
-
-    # Limit to the requested number of segments
-    if quantidade_de_virals and len(all_segments) > quantidade_de_virals:
-        print(f"Filtrando os top {quantidade_de_virals} segmentos de {len(all_segments)} candidatos encontrados nos chunks.")
-        all_segments = all_segments[:quantidade_de_virals]
-
-    final_result = {"segments": all_segments}
-    
-    # Validação básica de duração nos resultados (opcional, mas bom pra evitar erros no ffmpeg)
-    # Convertendo milliseconds pra int se necessário, garantindo sanidade
-    validated_segments = []
-    for seg in final_result['segments']:
-        # Garante start_time
-        if 'start_time' in seg:
-             # Deixa passar, cut_segments lida com int/str conversion
-             validated_segments.append(seg)
-    
-    final_result['segments'] = validated_segments
-    
-    return final_result
+    # Call the alignment / processing logic
+    return process_segments(
+        all_raw_segments, 
+        transcript_segments, 
+        tempo_minimo, 
+        tempo_maximo, 
+        output_count=quantidade_de_virals
+    )
