@@ -78,19 +78,18 @@ def crop_and_maintain_ar(frame, face_box, target_w, target_h, zoom_out_factor=2.
     resized = cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
     return resized
 
-def crop_and_resize_two_faces(frame, face_positions, target_size=(1080, 1920), zoom_out_factor=2.2):
+def crop_and_resize_two_faces(frame, face_positions, zoom_out_factor=2.2):
     """
     Recorta e redimensiona dois rostos detectados no frame, ajustando para uma composição vertical
-    onde cada rosto ocupa metade da tela.
+    1080x1920 onde cada rosto ocupa metade da tela (1080x960).
     """
     # Target dimensoes para cada metade
-    final_w, final_h = target_size
-    target_w = final_w
-    target_h = final_h // 2
+    target_w = 1080
+    target_h = 960
     
     # Se não temos 2 faces, fallback (segurança)
     if len(face_positions) < 2:
-        return np.zeros((final_h, final_w, 3), dtype=np.uint8)
+        return np.zeros((1920, 1080, 3), dtype=np.uint8)
 
     # Primeiro rosto (Topo)
     face1_img = crop_and_maintain_ar(frame, face_positions[0], target_w, target_h, zoom_out_factor)

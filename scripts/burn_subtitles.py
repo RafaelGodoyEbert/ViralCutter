@@ -20,7 +20,7 @@ def burn_video_file(video_path, subtitle_path, output_path):
             '-vf', f"subtitles='{subtitle_file_ffmpeg}'",
             '-c:v', encoder,
             '-preset', preset,
-            '-b:v', '15M',
+            '-b:v', '5M',
             '-pix_fmt', 'yuv420p',
             '-c:a', 'copy',
             output_path

@@ -4,16 +4,15 @@ import os
 import subprocess
 import mediapipe as mp
 
-def crop_and_resize_single_face(frame, face, target_size=(1080, 1920)):
+def crop_and_resize_single_face(frame, face):
         frame_height, frame_width = frame.shape[:2]
-        target_w, target_h = target_size
 
         x, y, w, h = face
         face_center_x = x + w // 2
         face_center_y = y + h // 2
 
-        # Cálculo da proporção desejada
-        target_aspect_ratio = target_w / target_h
+        # Cálculo da proporção desejada (9:16)
+        target_aspect_ratio = 9 / 16
 
         # Cálculo da área de corte para evitar barras pretas
         if frame_width / frame_height > target_aspect_ratio:
@@ -29,16 +28,15 @@ def crop_and_resize_single_face(frame, face, target_size=(1080, 1920)):
         crop_x2 = crop_x + new_width
         crop_y2 = crop_y + new_height
 
-        # Recorte e redimensionamento
+        # Recorte e redimensionamento para 1080x1920 (9:16)
         crop_img = frame[crop_y:crop_y2, crop_x:crop_x2]
-        resized = cv2.resize(crop_img, target_size, interpolation=cv2.INTER_AREA)
+        resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_AREA)
 
         return resized
 
-def resize_with_padding(frame, target_size=(1080, 1920)):
+def resize_with_padding(frame):
         frame_height, frame_width = frame.shape[:2]
-        target_w, target_h = target_size
-        target_aspect_ratio = target_w / target_h
+        target_aspect_ratio = 9 / 16
 
         if frame_width / frame_height > target_aspect_ratio:
             new_width = frame_width
@@ -58,7 +56,7 @@ def resize_with_padding(frame, target_size=(1080, 1920)):
         result[pad_top:pad_top+frame_height, pad_left:pad_left+frame_width] = frame
 
         # Redimensionar para as dimensões finais
-        return cv2.resize(result, target_size, interpolation=cv2.INTER_AREA)
+        return cv2.resize(result, (1080, 1920), interpolation=cv2.INTER_AREA)
 
 def detect_face_or_body(frame, face_detection, face_mesh, pose):
     # Converter a imagem para RGB
@@ -110,13 +108,12 @@ def detect_face_or_body(frame, face_detection, face_mesh, pose):
     return detections if detections else None
 
 
-def crop_center_zoom(frame, target_size=(1080, 1920)):
+def crop_center_zoom(frame):
     """
-    Crops the center of the frame to fill target ratio (Zoom effect).
+    Crops the center of the frame to fill 9:16 aspect ratio (Zoom effect).
     """
     frame_height, frame_width = frame.shape[:2]
-    target_w, target_h = target_size
-    target_aspect_ratio = target_w / target_h
+    target_aspect_ratio = 9 / 16
     
     # Calculate crop dimensions to FILL the target ratio
     if frame_width / frame_height > target_aspect_ratio:
@@ -137,6 +134,6 @@ def crop_center_zoom(frame, target_size=(1080, 1920)):
     
     crop_img = frame[start_y:start_y+new_height, start_x:start_x+new_width]
     
-    # Resize to final dimensions
-    return cv2.resize(crop_img, target_size, interpolation=cv2.INTER_AREA)
+    # Resize to final 1080x1920
+    return cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_AREA)
 

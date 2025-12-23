@@ -54,24 +54,6 @@ def get_best_encoder():
     CACHED_ENCODER = ("libx264", "ultrafast")
     return CACHED_ENCODER
 
-def get_target_resolution(width, height):
-    """
-    Calculate target 9:16 resolution based on input size.
-    Preserves 4K height if available.
-    """
-    # Use max of 1920 or input height to avoid downscaling 4K content
-    # If input is 4K (H=2160), use 2160.
-    target_h = max(1920, height)
-    
-    # Ensure divisible by 2
-    if target_h % 2 != 0: target_h -= 1
-    
-    # Calculate width for 9:16
-    target_w = int(target_h * 9 / 16)
-    if target_w % 2 != 0: target_w -= 1
-    
-    return target_w, target_h
-
 def get_center_bbox(bbox):
     # bbox: [x1, y1, x2, y2]
     return ((bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2)
@@ -125,8 +107,9 @@ def generate_short_fallback(input_file, output_file, index, project_folder, fina
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
     # Target dimensions (9:16)
-    target_width, target_height = get_target_resolution(width, height)
-    print(f"Target Resolution: {target_width}x{target_height}")
+    
+    target_width = 1080
+    target_height = 1920
     
     encoder_name, encoder_preset = get_best_encoder()
     
@@ -147,8 +130,8 @@ def generate_short_fallback(input_file, output_file, index, project_folder, fina
     
     # If using hardware encoder, we might want to set bitrate to ensure quality
     if "nvenc" in encoder_name or "amf" in encoder_name:
-         ffmpeg_cmd.extend(["-b:v", "15M"])
-
+         ffmpeg_cmd.extend(["-b:v", "5M"])
+    
     process = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE)
 
     while True:
@@ -157,9 +140,9 @@ def generate_short_fallback(input_file, output_file, index, project_folder, fina
             break
         
         if no_face_mode == "zoom":
-             result = crop_center_zoom(frame, (target_width, target_height))
+             result = crop_center_zoom(frame)
         else:
-             result = resize_with_padding(frame, (target_width, target_height))
+             result = resize_with_padding(frame)
         
         try:
             # Write raw bytes to ffmpeg stdin
@@ -189,7 +172,7 @@ def finalize_video(input_file, output_file, index, fps, project_folder, final_fo
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-stats",
             "-i", output_file,
             "-i", audio_file,
-            "-c:v", encoder_name, "-preset", encoder_preset, "-b:v", "15M",
+            "-c:v", encoder_name, "-preset", encoder_preset, "-b:v", "5M",
             "-c:a", "aac", "-b:a", "192k",
             "-r", str(fps),
             final_output
@@ -251,10 +234,8 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
-        target_width, target_height = get_target_resolution(frame_width, frame_height)
-        
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_file, fourcc, fps, (target_width, target_height))
+        out = cv2.VideoWriter(output_file, fourcc, fps, (1080, 1920))
 
         next_detection_frame = 0
         current_interval = int(5 * fps) # Initial guess
@@ -354,9 +335,9 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
                 current_faces = last_detected_faces
             else:
                 if no_face_mode == "zoom":
-                    result = crop_center_zoom(frame, (target_width, target_height))
+                    result = crop_center_zoom(frame)
                 else:
-                    result = resize_with_padding(frame, (target_width, target_height))
+                    result = resize_with_padding(frame)
                 coordinate_log.append({"frame": frame_index, "faces": []})
                 out.write(result)
                 continue
@@ -364,18 +345,18 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
             last_frame_face_positions = current_faces
 
             if hasattr(current_faces, '__len__') and len(current_faces) == 2:
-                 result = crop_and_resize_two_faces(frame, current_faces, target_size=(target_width, target_height))
+                 result = crop_and_resize_two_faces(frame, current_faces)
             else:
                  # Ensure it's list of tuples or single tuple? current_faces is list of tuples from detection
                  # If 1 face: [ (x,y,w,h) ]
                  if hasattr(current_faces, '__len__') and len(current_faces) > 0:
                      f = current_faces[0]
-                     result = crop_and_resize_single_face(frame, f, target_size=(target_width, target_height))
+                     result = crop_and_resize_single_face(frame, f)
                  else:
                      if no_face_mode == "zoom":
-                         result = crop_center_zoom(frame, (target_width, target_height))
+                         result = crop_center_zoom(frame)
                      else:
-                         result = resize_with_padding(frame, (target_width, target_height))
+                         result = resize_with_padding(frame)
             
             out.write(result)
 
@@ -407,13 +388,9 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
-    target_width, target_height = get_target_resolution(frame_width, frame_height)
     
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_file, fourcc, fps, (target_width, target_height))
+    out = cv2.VideoWriter(output_file, fourcc, fps, (1080, 1920))
     
     # Logic copied from generate_short_mediapipe
     detection_interval = int(2 * fps) # Default check every 2 seconds
@@ -471,9 +448,9 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
         else:
             # No face detected for a while -> Center/Padding fallback
             if no_face_mode == "zoom":
-                result = crop_center_zoom(frame, (target_width, target_height))
+                result = crop_center_zoom(frame)
             else:
-                result = resize_with_padding(frame, (target_width, target_height))
+                result = resize_with_padding(frame)
             out.write(result)
             continue
 
@@ -485,7 +462,7 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
         else:
              face_bbox = current_faces # Should be handled
 
-        result = crop_and_resize_single_face(frame, face_bbox, target_size=(target_width, target_height))
+        result = crop_and_resize_single_face(frame, face_bbox)
         out.write(result)
 
     cap.release()
@@ -511,12 +488,9 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    target_width, target_height = get_target_resolution(frame_width, frame_height)
-    print(f"Target Resolution: {target_width}x{target_height}")
-
     # Using mp4v for container, but final mux will fix encoding
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    out = cv2.VideoWriter(output_file, fourcc, fps, (target_width, target_height))
+    out = cv2.VideoWriter(output_file, fourcc, fps, (1080, 1920))
     
     # Dynamic Interval Logic
     next_detection_frame = 0
