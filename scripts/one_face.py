@@ -107,3 +107,33 @@ def detect_face_or_body(frame, face_detection, face_mesh, pose):
     # Se nada for detectado, retornar uma lista vazia
     return detections if detections else None
 
+
+def crop_center_zoom(frame):
+    """
+    Crops the center of the frame to fill 9:16 aspect ratio (Zoom effect).
+    """
+    frame_height, frame_width = frame.shape[:2]
+    target_aspect_ratio = 9 / 16
+    
+    # Calculate crop dimensions to FILL the target ratio
+    if frame_width / frame_height > target_aspect_ratio:
+        # Source is wider than target (e.g. 16:9 source, 9:16 target) -> Crop Width
+        new_width = int(frame_height * target_aspect_ratio)
+        new_height = frame_height
+    else:
+        # Source is taller than target -> Crop Height
+        new_width = frame_width
+        new_height = int(frame_width / target_aspect_ratio)
+        
+    start_x = (frame_width - new_width) // 2
+    start_y = (frame_height - new_height) // 2
+    
+    # Ensure bounds
+    start_x = max(0, start_x)
+    start_y = max(0, start_y)
+    
+    crop_img = frame[start_y:start_y+new_height, start_x:start_x+new_width]
+    
+    # Resize to final 1080x1920
+    return cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_AREA)
+

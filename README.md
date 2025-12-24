@@ -1,133 +1,106 @@
-# ViralCutter: Gerador de Vídeos Virais
-[ ![](https://dcbadge.vercel.app/api/server/aihubbrasil) ](https://discord.gg/aihubbrasil) <br>
-[English](https://github.com/RafaelGodoyEbert/ViralCutter/blob/main/README_en.md) | [Português](https://github.com/RafaelGodoyEbert/ViralCutter/blob/main/README.md)
+# ViralCutter
+[![Discord](https://dcbadge.limes.pink/api/server/tAdPHFAbud)](https://discord.gg/tAdPHFAbud)<br>
 
-## **Descrição**
-ViralCutter é uma ferramenta inovadora para gerar vídeos virais a partir de conteúdo existente. Com técnicas avançadas de processamento de vídeo e áudio, o ViralCutter corta e edita segmentos de vídeo que são perfeitos para compartilhamento em redes sociais. Utilizando o modelo WhisperX para transcrição e geração de legendas automáticas, ele adapta os vídeos para o formato 9:16 (vertical), ideal para plataformas como TikTok e Instagram com Reels e Youtube com Shorts.
+**Alternativa open-source 100% gratuita, local e ilimitada ao Opus Clip**  
+Transforme vídeos longos do YouTube em shorts virais otimizados para TikTok, Instagram Reels e YouTube Shorts – com IA de ponta, legendas dinâmicas, *face tracking* preciso e tradução automática. Tudo rodando na sua máquina.
 
-## **Novidades e Atualizações (Changelog)**
+[![Stars](https://img.shields.io/github/stars/RafaelGodoyEbert/ViralCutter?style=social)](https://github.com/RafaelGodoyEbert/ViralCutter/stargazers)
+[![Forks](https://img.shields.io/github/forks/RafaelGodoyEbert/ViralCutter?style=social)](https://github.com/RafaelGodoyEbert/ViralCutter/network/members)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1UZKzeqjIeEyvq9nPx7s_4mU6xlkZQn_R?usp=sharing)
 
-Confira as melhorias mais recentes:
+[English](README_en.md) • [Português](README.md)
 
--   **Otimização de Performance**: "Slicing" de transcrição implementado. O vídeo é transcrito apenas uma vez, e os cortes reutilizam os dados, eliminando reprocessamento.
--   **Suporte a IA Flexível**: Integração nativa com **Gemini API** e suporte experimental ao **G4F** (GPT-4 Free), além de modo Manual.
--   **Configuração Externa**: Arquivos `api_config.json` e `prompt.txt` para fácil personalização sem mexer no código.
--   **Correção de Rostos**: Fix no MediaPipe para rastreamento de rostos preciso sem depender de "Center Crop".
--   **Melhorias em Legendas**: Posicionamento inteligente para vídeos com 2 faces (split screen) e correções de estilo.
+## Por que ViralCutter é um "Game Changer"?
 
-*(Veja o [changelog.md](changelog.md) para detalhes completos)*
+Esqueça assinaturas caras e limites de minutos. O ViralCutter oferece poder ilimitado no seu hardware.
 
-## **Funcionalidades**
+| Feature | ViralCutter (Open-Source) | Opus Clip / Klap / Munch (SaaS) |
+| :--- | :--- | :--- |
+| **Preço** | **Gratuito e Ilimitado** | $20–$100/mês + limites de min. |
+| **Privacidade** | **100% Local** (Seus dados não saem do PC) | Upload para nuvem de terceiros |
+| **IA & LLM** | **Flexível**: Gemini (Free), GPT-4, **Local GGUF (Offline)** | Apenas o que eles oferecem |
+| **Face Tracking** | **Split Screen (2 faces)**, Active Speaker (Exp.), Auto | Básico ou pago extra |
+| **Tradução** | **Sim** (Traduza legendas p/ 10+ línguas) | Recursos limitados |
+| **Edição** | **Exporta XML para Premiere Pro** (Beta) | Editor web limitado |
+| **Watermark** | **ZERO** | Sim (nos planos free) |
 
-- **Download de Vídeos**: Baixa vídeos do YouTube através de uma URL fornecida.
-- **Transcrição de Áudio**: Converte áudio em texto utilizando o modelo WhisperX.
-- **Identificação de Segmentos Virais**: Utiliza IA para detectar partes do vídeo com alto potencial de viralização.
-- **Corte e Ajuste de Formato**: Corta os segmentos selecionados e ajusta a proporção para 9:16.
-- **Recorte Inteligente**: Mantém o falante em foco (Face Tracking) ou utiliza modo Split Screen (2-Faces) automático.
-- **Mesclagem de Áudio e Vídeo**: Combina o áudio transcrito com os clipes de vídeo processados.
-- **Exportação em Lote**: Gera um arquivo ZIP com todos os vídeos virais criados, facilitando o download e compartilhamento.
-- **Legenda personalizada**: Você cria uma legenda personalizada com cores, highlight, sem highlight ou palavra por palavra, tendo uma ampla possibilidade de edição.
+**Resultados profissionais, privacidade total e custo zero.**
 
+## Funcionalidades Principais 🚀
 
-## **Como Usar**
-<!--
-Entre no link e siga os passos na ordem:<br> [![Open In Colab](https://img.shields.io/badge/Colab-F9AB00?style=for-the-badge&logo=googlecolab&color=525252)](https://colab.research.google.com/drive/1gcxImzBt0ObWLfW3ThEcwqKhasB4WpgX?usp=sharing)
-HF [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)]()
--->
+-   🤖 **Corte Viral com IA**: Identifica automaticamente os ganchos e momentos mais engajadores usando **Gemini**, **GPT-4** ou **LLMs Locais (Llama 3, DeepSeek, etc)**.
+-   🗣️ **Transcrição Ultra-Precisa**: Baseado em **WhisperX** com aceleração via GPU para legendas perfeitas.
+-   🎨 **Legendas Dinâmicas**: Estilo "Hormozi" com highlight palavra por palavra, cores vibrantes, emojis e total customização.
+-   🎥 **Direção de Câmera Automática**:
+    -   **Auto-Crop 9:16**: Transforma horizontal em vertical mantendo o foco.
+    -   **Split Screen Inteligente**: Detecta 2 pessoas conversando e divide a tela automaticamente.
+    -   **Active Speaker (Experimental)**: A câmera corta para quem está falando.
+-   🌍 **Tradução de Vídeo**: Gere legendas traduzidas automaticamente (ex: Vídeo em Inglês -> Legenda em Português).
+-   💾 **Qualidade & Controle**: Escolha a resolução (até 4K/Best), formate a saída e salve configurações de processamento.
+-   ⚡ **Performance**: Transcrição com "slicing" (processa 1x, corta N vezes) e suporte a instalação ultra-rápida via `uv`.
+-   🖥️ **Interface Moderna**: WebUI em Gradio, Modo Escuro, Galeria de Projetos e Editor de Legendas integrado.
 
-- Entre no link e siga os passos na ordem: [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1UZKzeqjIeEyvq9nPx7s_4mU6xlkZQn_R?usp=sharing#scrollTo=pa36OeArowme) <br>
+## Interface Web (Inspirada no Opus Clip)
+![WebUI Home](https://github.com/user-attachments/assets/ba147149-fc5f-48fc-a03c-fc86b5dc0568)
+*Painel de controle intuitivo com ajustes finos de IA e renderização.*
 
-## **Limitações**
+![WebUi Library](https://github.com/user-attachments/assets/b0204e4b-0e5d-4ee4-b7b4-cac044b76c24)
+*Biblioteca: Galeria estilo OpusClip e controles intuitivos*
 
-- A qualidade dos vídeos gerados pode variar com base na qualidade do vídeo original.
-- O tempo de processamento depende fortemente da sua GPU.
-- O modelo **G4F** pode ser instável ou ter limites de requisição. Use **Gemini** para maior estabilidade mas precisa de api_key.
-
-## Inspiração:
-Este projeto foi inspirado nos seguintes repositórios:
-
-*   [Reels Clips Automator](https://github.com/eddieoz/reels-clips-automator)
-*   [YoutubeVideoToAIPoweredShorts](https://github.com/Fitsbit/YoutubeVideoToAIPoweredShorts)
-
-## TODO📝
-- [x] Release code
-- [ ] Huggingface SpaceDemo
-- [x] Two face in the cut
-- [x] Custom caption and burn
-- [x] Make the code faster
-- [ ] More types of framing beyond 9:16
-- [x] The cut follows the face as it moves
-- [ ] Automatic translation
-- [ ] Satisfactory video on the side
-- [ ] Background music
-- [ ] watermark at user's choice
-- [ ] Upload directly to YouTube channel
-
-## Exemplos
-### Exmplo de vídeo viral ``com highlight ativo`` [comprimido pra caber no github]
-https://github.com/user-attachments/assets/dd9a7039-e0f3-427a-a6e1-f50ab5029082
-
-### Exemplo Opus Clip vs ViralCutter [comprimido pra caber no github]
-https://github.com/user-attachments/assets/12916792-dc0e-4f63-a76b-5698946f50f4
-
-### Exemplo 2 faces [comprimido pra caber no github]
-https://github.com/user-attachments/assets/ca7ebb9c-52ba-4171-a513-625bef690a2b
-
-## **Instalação e Uso Local**
+## Instalação Local (Super Rápida ⚡)
 
 ### Pré-requisitos
--   Python 3.10+
--   FFmpeg instalado e no PATH do sistema.
--   GPU NVIDIA recomendada (com CUDA instalado) para o WhisperX.
+- Python 3.10+
+- FFmpeg instalado no sistema
+- **GPU NVIDIA** (Altamente recomendada para velocidade e funcionalidades de IA local)
 
-### Configuração
-1.  **Instale as dependências**:
-    ```bash
-    pip install -r requirements.txt
-    ```
-    *(Nota: WhisperX e Torch podem exigir instalação específica para sua versão de CUDA)*.
+### Passo a Passo
 
-2.  **Configure a API (Opcional mas Recomendado)**:
-    Edite o arquivo `api_config.json` na pasta raiz:
-    ```json
-    {
-        "selected_api": "gemini",
-        "gemini": {
-            "api_key": "SUA_CHAVE_AQUI"
-        }
-    }
-    ```
+1.  **Instale as dependências**
+    Execute o script `install_dependencies.bat`. Ele usa o gerenciador `uv` para configurar tudo em segundos.
 
-### Executando
+2.  **Configurar IA (Opcional)**
+    -   **Gemini (Recomendado/Free)**: Adicione sua chave em `api_config.json`.
+    -   **Local (GGUF)**: Baixe seus modelos `.gguf` favoritos e coloque na pasta `models/`. O ViralCutter irá detectá-los automaticamente.
 
-#### Modo Interativo (Simples)
-Basta rodar o script e seguir as instruções na tela:
-```bash
-python main_improved.py
-```
+3.  **Rodar**
+    -   Duplo clique em `run_webui.bat` para abrir a interface no navegador.
+    -   Ou use `python main_improved.py` para a versão CLI.
 
-#### Modo CLI (Avançado)
-Você pode passar todos os argumentos via linha de comando para automação:
+## Exemplos de Saída
 
-```bash
-python main_improved.py --url "https://youtu.be/EXEMPLO" --segments 3 --ai-backend gemini --model large-v3-turbo
-```
+**Clip viral com legendas highlight**  
+<video src="https://github.com/user-attachments/assets/7a32edce-fa29-4693-985f-2b12313362f3" controls></video>
 
-**Argumentos Principais:**
--   `--url`: URL do vídeo do YouTube.
--   `--segments`: Número de cortes a gerar.
--   `--ai-backend`: `gemini` (Recomendado), `g4f` ou `manual`.
--   `--viral`: Ativa modo de busca viral automática.
--   `--face-mode`: `auto`, `1` (uma cara), ou `2` (duas caras/split).
--   `--workflow`: `1` (Completo) ou `2` (Apenas Corte, sem legendas/crop).
+**Comparação direta: Opus Clip vs ViralCutter** (mesmo vídeo de entrada)  
+<video src="https://github.com/user-attachments/assets/12916792-dc0e-4f63-a76b-5698946f50f4" controls></video>
 
----
+**Modo Split Screen (2 faces)**  
+<video src="https://github.com/user-attachments/assets/f5ce5168-04a2-4c9b-9408-949a5400d020" controls></video>
 
-## **Contribuições**
-Quer ajudar a tornar o ViralCutter ainda melhor? Se você tiver sugestões ou quiser contribuir com o código, fique à vontade para abrir uma issue ou enviar um pull request no nosso repositório do GitHub.
+## Roadmap (TODO)
 
-## **Versão**
-`0.7v Alpha`  
-Uma alternativa gratuita ao `opus.pro` e ao `vidyo.ai`.
+- [x] Lançamento do código
+- [ ] Demo permanente no Hugging Face Spaces
+- [x] Suporte a 2 pessoas (Split Screen)
+- [x] Legendas personalizadas e renderização (Burn)
+- [x] Otimização de performance (Código mais rápido)
+- [x] Modelos de IA 100% locais (Ollama/Llama/GGUF)
+- [x] Tradução automática de legendas
+- [x] Rastreamento dinâmico de rosto (O corte segue o movimento)
+- [x] Exportação de XML para Premiere Pro (Beta)
+- [ ] Música de fundo automática (Auto-Duck)
+- [ ] Upload direto para TikTok/YouTube/Instagram
+- [ ] Mais formatos de enquadramento (além de 9:16)
+- [ ] Watermark opcional
 
 ---
+
+## Contribua!
+
+O ViralCutter é mantido pela comunidade. Junte-se a nós para democratizar a criação de conteúdo com IA!
+-   **Discord**: [AI Hub Brasil](https://discord.gg/aihubbrasil)
+-   **Github**: Dê uma ⭐ estrela se este projeto te ajudou!
+
+**Versão Atual**: 0.8v Alpha
+*ViralCutter: Porque clips virais não precisam custar uma fortuna.* 🚀
