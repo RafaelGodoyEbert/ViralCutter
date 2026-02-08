@@ -63,7 +63,7 @@ def init_yolo(model_name="yolov8n.pt"):
 class SmoothBBox:
     """
     Exponential Moving Average (EMA) smoothing for bounding boxes with Cyclic Zoom.
-    Provides a "cinematic" camera effect: zoom in → hold → zoom out → hold → repeat.
+    Provides a "cinematic" camera effect: zoom in → hold → SNAP back → hold → repeat.
     """
     
     def __init__(self, alpha=0.02, fps=30, zoom_duration_seconds=3.0, 
@@ -93,8 +93,9 @@ class SmoothBBox:
         self.current_frame = 0
         self.current_zoom = initial_zoom
         
-        # Full cycle: zoom_in → hold → zoom_out → hold
-        self.cycle_length = 2 * self.zoom_duration_frames + 2 * self.hold_frames
+        # Full cycle: zoom_in (gradual) → hold (zoomed) → snap back (instant) → hold (wide)
+        # No gradual zoom out, so cycle = zoom_in + 2*hold
+        self.cycle_length = self.zoom_duration_frames + 2 * self.hold_frames
     
     def _ease_in_out_cubic(self, t):
         """Smooth easing function for natural acceleration/deceleration."""
@@ -105,12 +106,13 @@ class SmoothBBox:
     
     def get_progressive_zoom(self):
         """
-        Calculate cyclic zoom level: zoom in → hold → zoom out → hold → repeat.
+        Calculate cyclic zoom level: zoom in → hold → SNAP back → hold → repeat.
+        Zoom out is INSTANT (snap), not gradual.
         """
         # Position within current cycle
         cycle_pos = self.current_frame % self.cycle_length
         
-        # Phase 1: ZOOM IN (0 to zoom_duration_frames)
+        # Phase 1: ZOOM IN (0 to zoom_duration_frames) - GRADUAL
         if cycle_pos < self.zoom_duration_frames:
             progress = cycle_pos / self.zoom_duration_frames
             eased = self._ease_in_out_cubic(progress)
@@ -120,14 +122,8 @@ class SmoothBBox:
         elif cycle_pos < self.zoom_duration_frames + self.hold_frames:
             return self.target_zoom
         
-        # Phase 3: ZOOM OUT (zoom_duration + hold to 2*zoom_duration + hold)
-        elif cycle_pos < 2 * self.zoom_duration_frames + self.hold_frames:
-            zoom_out_start = self.zoom_duration_frames + self.hold_frames
-            progress = (cycle_pos - zoom_out_start) / self.zoom_duration_frames
-            eased = self._ease_in_out_cubic(progress)
-            return self.target_zoom - (self.target_zoom - self.initial_zoom) * eased
-        
-        # Phase 4: HOLD at wide (2*zoom_duration + hold to end of cycle)
+        # Phase 3: SNAP BACK to wide (INSTANT, not gradual)
+        # This happens immediately after hold phase
         else:
             return self.initial_zoom
     
