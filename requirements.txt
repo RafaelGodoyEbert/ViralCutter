@@ -1,0 +1,23 @@
+g4f[all]
+yt-dlp
+ffmpeg-python
+whisperx
+mediapipe
+google-genai
+insightface
+onnxruntime-gpu
+gradio
+opencv-python
+numpy
+psutil
+fastapi
+uvicorn
+torch
+deep-translator
+tqdm
+
+
+
+# Local LLM Support with CUDA 12.4
+--extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
+llama-cpp-python
