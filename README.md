@@ -1,11 +1,12 @@
-<<<<<<< HEAD
 # ViralCutter - Fork com Notebooks Kaggle e Colab
 
-Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) com notebooks otimizados para Kaggle e Google Colab.
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](LINK_COLAB_AQUI)
+[![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](LINK_KAGGLE_AQUI)
+[![Discord](https://dcbadge.limes.pink/api/server/tAdPHFAbud)](https://discord.gg/tAdPHFAbud)
 
-## 📚 O que é o ViralCutter?
+> **Fork customizado** com notebooks otimizados para Kaggle e Google Colab. Para o repositório original completo, [veja abaixo](#viralcutter-original).
 
-Uma alternativa gratuita ao `opus.pro` e ao `vidyo.ai` para criar cortes automáticos de vídeos longos (podcasts, lives, etc.) em clipes virais para Reels/Shorts/TikTok usando IA.
+Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) - alternativa gratuita ao `opus.pro` e ao `vidyo.ai` para criar cortes automáticos de vídeos longos (podcasts, lives, etc.) em clipes virais para Reels/Shorts/TikTok usando IA.
 
 ## 🚀 Notebooks Disponíveis
 
@@ -13,8 +14,10 @@ Uma alternativa gratuita ao `opus.pro` e ao `vidyo.ai` para criar cortes automá
 **Características:**
 - ✅ Instalação rápida (3-5 min)
 - ✅ Upload automático para Google Drive
-- ✅ Otimizado para GPUs T4
+- ✅ Otimizado para GPUs T4 (Faster-Whisper integrado)
 - ❌ Zoom inteligente removido (mais leve)
+
+> **💡 Otimização T4**: Usa `faster-whisper` com modelo quantizado para transcrição eficiente na GPU limitada do Colab.
 
 **Como usar:**
 1. Abra o notebook no Colab (link em breve)
@@ -23,12 +26,15 @@ Uma alternativa gratuita ao `opus.pro` e ao `vidyo.ai` para criar cortes automá
 4. Clique no link `gradio.live` gerado
 5. Processe seus vídeos - os cortes irão automaticamente para seu Drive!
 
-### 🟠 Kaggle
+### 🟠 Kaggle  
 **Características:**
 - ✅ 30h/semana de GPU grátis
 - ✅ Upload OAuth para sua conta Drive
 - ✅ Suporte a datasets persistentes
 - ✅ Documentação completa de configuração
+- ✅ Faster-Whisper otimizado para T4
+
+> **💡 Otimização T4**: Ambos notebooks usam `faster-whisper` que é mais eficiente em memória. Recomendado usar modelo `large-v2` quantizado para melhor performance na T4.
 
 **Como usar:**
 1. **Configure os datasets primeiro** (veja seção abaixo)
