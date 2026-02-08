@@ -248,6 +248,7 @@ def run_viral_cutter(input_source, project_name, url, video_file, segments, vira
 
     workflow_map = {"Full": "1", "Cut Only": "2", "Subtitles Only": "3"}
     cmd.extend(["--workflow", workflow_map.get(workflow, "1")])
+    print(f"[DEBUG] Using face_model: {face_model}")
     cmd.extend(["--face-model", face_model])
     cmd.extend(["--face-mode", face_mode])
     if face_detect_interval: cmd.extend(["--face-detect-interval", str(face_detect_interval)])
@@ -479,7 +480,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     model_input = gr.Dropdown(["tiny", "small", "medium", "large", "large-v1", "large-v2", "large-v3", "turbo", "large-v3-turbo", "distil-large-v2", "distil-medium.en", "distil-small.en", "distil-large-v3"], label=i18n("Whisper Model"), value="large-v3-turbo")
                     with gr.Row():
                         workflow_input = gr.Dropdown(choices=[(i18n("Full"), "Full"), (i18n("Cut Only"), "Cut Only"), (i18n("Subtitles Only"), "Subtitles Only")], label=i18n("Workflow"), value="Full")
-                        face_model_input = gr.Dropdown(["yolo", "insightface", "mediapipe"], label=i18n("Face Model"), value=os.environ.get("VIRALCUTTER_FACE_MODEL", "insightface"), info="YOLO = Smooth Zoom")
+                        face_model_input = gr.Dropdown(["yolo", "insightface", "mediapipe"], label=i18n("Face Model"), value="yolo", info="YOLO = Smooth Zoom")
                     with gr.Row():
                         face_mode_input = gr.Dropdown(choices=[(i18n("Auto"), "auto"), ("1", "1"), ("2", "2")], label=i18n("Face Mode"), value="auto")
                         face_detect_interval_input = gr.Textbox(label=i18n("Face Det. Interval"), value="0.17,1.0")
