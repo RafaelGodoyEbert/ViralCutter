@@ -1,7 +1,7 @@
 # 🎬 ViralCutter - Smooth Face Tracking Edition
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/masterface77/ViralCutter/blob/smooth-zoom/ViralCutter-SmoothZoom.ipynb)
-[![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/code/levireis77/viralcutter-kaggle-smoothzoom)
+[![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/code/levireis77/viralcutter-cyclic-smooth-zoom-edition-kag)
 [![Discord](https://dcbadge.limes.pink/api/server/tAdPHFAbud)](https://discord.gg/tAdPHFAbud)
 
 > **🎯 Branch `smooth-zoom`** - Versão com **YOLO Smooth Tracking** + face tracking configurável!
