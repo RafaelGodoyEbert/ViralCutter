@@ -66,17 +66,18 @@ class SmoothBBox:
     Provides a "cinematic" camera follow effect.
     """
     
-    def __init__(self, alpha=0.15):
+    def __init__(self, alpha=0.05):
         """
         Args:
             alpha: Smoothing factor (0.0 = no movement, 1.0 = instant snap)
-                   0.1-0.2 gives a nice cinematic feel
+                   0.03-0.08 gives a very smooth cinematic feel
+                   0.05 = balanced smoothness (default)
         """
         self.alpha = alpha
         self.smooth_bbox = None  # (x1, y1, x2, y2)
         self.target_bbox = None
         self.frames_without_detection = 0
-        self.max_frames_hold = 30  # Hold position for ~1 second at 30fps
+        self.max_frames_hold = 60  # Hold position for ~2 seconds at 30fps
     
     def update(self, detected_bbox):
         """
