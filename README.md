@@ -15,13 +15,13 @@ Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) com **Cyc
 ![Cyclic Zoom Demo](https://img.shields.io/badge/🔄-Zoom_Cíclico-blueviolet?style=for-the-badge)
 
 ### 🔄 Efeito de "Respiração"
-O zoom agora funciona em ciclos contínuos como uma "respiração" cinematográfica:
+O zoom agora funciona em ciclos contínuos com uma aproximação lenta e um retorno rápido:
 
 ```
-Ciclo de ~10 segundos (repete até o fim do vídeo):
-├── Zoom In (3s)   : 1.0x → 1.4x (aproxima no rosto)
+Ciclo de ~7 segundos (repete até o fim do vídeo):
+├── Zoom In (3s)   : 1.0x → 1.4x (aproxima suavemente no rosto)
 ├── Hold (2s)      : mantém 1.4x (close-up)
-├── Zoom Out (3s)  : 1.4x → 1.0x (volta para visão ampla)
+├── SNAP BACK (0s) : volta INSTANTANEAMENTE para 1.0x (snap)
 └── Hold (2s)      : mantém 1.0x (visão ampla)
 ```
 
@@ -43,6 +43,17 @@ Ciclo de ~10 segundos (repete até o fim do vídeo):
 - 🔍 **YOLOv8** - Detecção e tracking de pessoas em tempo real
 - 📊 **ByteTrack** - IDs persistentes para cada pessoa
 - 📈 **EMA (Exponential Moving Average)** - Suavização com alpha=0.02
+
+### ⚡ Otimização T4 (WhisperX)
+Transcrição otimizada para GPUs T4 do Colab/Kaggle (16GB VRAM):
+
+| Configuração | Valor | Benefício |
+|--------------|-------|-----------|
+| `compute_type` | int8_float16 | 50% menos VRAM |
+| `model` | large-v2 | Mais estável que v3 |
+| `batch_size` | 8 | Evita OOM em vídeos longos |
+| `language` | pt (padrão) | Pula detecção automática |
+| `chunk_size` | 15 | Chunks maiores = mais eficiente |
 
 ---
 
