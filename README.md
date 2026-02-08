@@ -1,38 +1,48 @@
-# 🎬 ViralCutter - Smooth Zoom Edition
+# 🎬 ViralCutter - Cyclic Smooth Zoom Edition
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/masterface77/ViralCutter/blob/smooth-zoom/ViralCutter-SmoothZoom.ipynb)
 [![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/code/levireis77/viralcutter-kaggle-smoothzoom)
 [![Discord](https://dcbadge.limes.pink/api/server/tAdPHFAbud)](https://discord.gg/tAdPHFAbud)
 
-> **🎯 Branch `smooth-zoom`** - Versão com câmera suave que segue o rosto usando YOLO + EMA Smoothing!
+> **🎯 Branch `smooth-zoom`** - Versão com **Zoom Cíclico Cinematográfico** usando YOLO + EMA Smoothing!
 
-Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) com **Smooth Zoom** - efeito cinematográfico de câmera que segue o rosto suavemente, sem movimentos robóticos.
+Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) com **Cyclic Smooth Zoom** - efeito de câmera que faz zoom in/out progressivo no rosto de forma suave e cíclica.
 
 ---
 
-## ✨ O que é o Smooth Zoom?
+## ✨ Novidades v0.9 - Cyclic Smooth Zoom
 
-![Smooth Zoom Demo](https://img.shields.io/badge/🎥-Câmera_Suave-blueviolet?style=for-the-badge)
+![Cyclic Zoom Demo](https://img.shields.io/badge/🔄-Zoom_Cíclico-blueviolet?style=for-the-badge)
 
-**Antes:** Câmera pula de posição em posição (robótico)  
-**Depois:** Câmera "flutua" suavemente seguindo o rosto (cinematográfico)
+### 🔄 Efeito de "Respiração"
+O zoom agora funciona em ciclos contínuos como uma "respiração" cinematográfica:
 
-### Como Funciona
 ```
-Frame 1: Rosto detectado em (100, 200)
-         → Câmera move para (100, 200)
-
-Frame 2: Rosto move para (150, 210)
-         → EMA suaviza: câmera em ~(103, 201) ao invés de pular
-
-Frame 3: Rosto em (160, 215)
-         → Câmera em ~(106, 202) - movimento suave e natural
+Ciclo de ~10 segundos (repete até o fim do vídeo):
+├── Zoom In (3s)   : 1.0x → 1.4x (aproxima no rosto)
+├── Hold (2s)      : mantém 1.4x (close-up)
+├── Zoom Out (3s)  : 1.4x → 1.0x (volta para visão ampla)
+└── Hold (2s)      : mantém 1.0x (visão ampla)
 ```
+
+### 🎥 Tracking Ultra Suave
+- **Alpha 0.02** (antes era 0.05) - câmera segue o rosto bem mais devagar
+- **Easing cubic** - transições de zoom com aceleração/desaceleração suave
+- Sem movimentos robóticos ou saltos bruscos
+
+### ⚙️ Parâmetros Configuráveis
+| Parâmetro | Padrão | Descrição |
+|-----------|--------|-----------|
+| `alpha` | 0.02 | Suavização do tracking (menor = mais lento) |
+| `zoom_duration` | 3.0s | Tempo de cada transição in/out |
+| `hold_duration` | 2.0s | Tempo parado em cada nível |
+| `initial_zoom` | 1.0 | Nível de zoom na visão ampla |
+| `target_zoom` | 1.4 | Nível de zoom no close-up (40% mais perto) |
 
 **Tecnologias:**
 - 🔍 **YOLOv8** - Detecção e tracking de pessoas em tempo real
 - 📊 **ByteTrack** - IDs persistentes para cada pessoa
-- 📈 **EMA (Exponential Moving Average)** - Suavização com alpha=0.05
+- 📈 **EMA (Exponential Moving Average)** - Suavização com alpha=0.02
 
 ---
 
