@@ -1,7 +1,7 @@
 # ViralCutter - Fork com Notebooks Kaggle e Colab
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](LINK_COLAB_AQUI)
-[![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](LINK_KAGGLE_AQUI)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/masterface77/ViralCutter/blob/main/ViralCutter-Colab.ipynb)
+[![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/code/levireis77/viralcutter-kaggle)
 [![Discord](https://dcbadge.limes.pink/api/server/tAdPHFAbud)](https://discord.gg/tAdPHFAbud)
 
 > **Fork customizado** com notebooks otimizados para Kaggle e Google Colab. Para o repositório original completo, [veja abaixo](#viralcutter-original).
@@ -20,7 +20,7 @@ Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) - alterna
 > **💡 Otimização T4**: Usa `faster-whisper` com modelo quantizado para transcrição eficiente na GPU limitada do Colab.
 
 **Como usar:**
-1. Abra o notebook no Colab (link em breve)
+1. Abra o notebook no Colab [clicando aqui](https://colab.research.google.com/github/masterface77/ViralCutter/blob/main/ViralCutter-Colab.ipynb)
 2. Execute a célula principal
 3. Aguarde a instalação
 4. Clique no link `gradio.live` gerado
@@ -38,7 +38,7 @@ Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) - alterna
 
 **Como usar:**
 1. **Configure os datasets primeiro** (veja seção abaixo)
-2. Abra o notebook no Kaggle (link em breve)
+2. Abra o notebook no Kaggle [clicando aqui](https://www.kaggle.com/code/levireis77/viralcutter-kaggle)
 3. Execute a célula principal
 4. Faça a autenticação OAuth quando solicitado
 5. Clique no link `gradio.live` gerado
@@ -119,6 +119,7 @@ Token OAuth reutilizável (gerado na primeira execução).
 
 ## 🔗 Links Úteis
 
+- **Licença (GPL v3):** [LICENSE](LICENSE)
 - **Repositório Original:** [RafaelGodoyEbert/ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter)
 - **Discord (Suporte):** [discord.gg/tAdPHFAbud](https://discord.gg/tAdPHFAbud)
 
@@ -137,8 +138,9 @@ Fork customizado para facilitar uso em Kaggle e Colab.
 
 ## 📄 Licença
 
-Segue a mesma licença do projeto original.
-=======
+Este projeto é licenciado sob a **GNU General Public License v3**, permitindo que você copie, distribua e modifique o software livremente, desde que mantenha a mesma licença. [Leia a licença completa aqui](LICENSE).
+
+<a id="viralcutter-original"></a>
 # ViralCutter
 [![Discord](https://dcbadge.limes.pink/api/server/tAdPHFAbud)](https://discord.gg/tAdPHFAbud)<br>
 
@@ -245,4 +247,3 @@ O ViralCutter é mantido pela comunidade. Junte-se a nós para democratizar a cr
 
 **Versão Atual**: 0.8v Alpha
 *ViralCutter: Porque clips virais não precisam custar uma fortuna.* 🚀
->>>>>>> a297208840147cd5e9038f036e815ebf9dcf46bd

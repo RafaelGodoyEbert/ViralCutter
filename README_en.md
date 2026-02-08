@@ -102,5 +102,9 @@ ViralCutter is community-maintained. Join us to democratize AI content creation!
 -   **Discord**: [AI Hub Brasil](https://discord.gg/aihubbrasil)
 -   **Github**: Give us a ⭐ star if this project helped you!
 
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3**. [Read the full license here](LICENSE).
+
 **Current Version**: 0.8v Alpha
 *ViralCutter: Because viral clips shouldn't cost a fortune.* 🚀
