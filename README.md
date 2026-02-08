@@ -1,48 +1,37 @@
-# 🎬 ViralCutter - Cyclic Smooth Zoom Edition
+# 🎬 ViralCutter - Smooth Face Tracking Edition
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/masterface77/ViralCutter/blob/smooth-zoom/ViralCutter-SmoothZoom.ipynb)
 [![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/code/levireis77/viralcutter-kaggle-smoothzoom)
 [![Discord](https://dcbadge.limes.pink/api/server/tAdPHFAbud)](https://discord.gg/tAdPHFAbud)
 
-> **🎯 Branch `smooth-zoom`** - Versão com **Zoom Cíclico Cinematográfico** usando YOLO + EMA Smoothing!
+> **🎯 Branch `smooth-zoom`** - Versão com **YOLO Smooth Tracking** + face tracking configurável!
 
-Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) com **Cyclic Smooth Zoom** - efeito de câmera que faz zoom in/out progressivo no rosto de forma suave e cíclica.
+Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) com **Smooth Face Tracking** - a câmera segue o rosto de forma suave e cinematográfica.
 
 ---
 
-## ✨ Novidades v0.9 - Cyclic Smooth Zoom
+## ✨ Novidades v0.9 - Smooth Face Tracking
 
-![Cyclic Zoom Demo](https://img.shields.io/badge/🔄-Zoom_Cíclico-blueviolet?style=for-the-badge)
+![Smooth Tracking](https://img.shields.io/badge/🎥-Smooth_Tracking-blueviolet?style=for-the-badge)
 
-### 🔄 Efeito de "Respiração"
-O zoom agora funciona em ciclos contínuos com uma aproximação lenta e um retorno rápido:
+### 🎥 Tracking Suave Configurável
+A suavidade do tracking agora pode ser ajustada no Gradio!
 
-```
-Ciclo de ~7 segundos (repete até o fim do vídeo):
-├── Zoom In (3s)   : 1.0x → 1.4x (aproxima suavemente no rosto)
-├── Hold (2s)      : mantém 1.4x (close-up)
-├── SNAP BACK (0s) : volta INSTANTANEAMENTE para 1.0x (snap)
-└── Hold (2s)      : mantém 1.0x (visão ampla)
-```
+| Alpha | Efeito |
+|-------|--------|
+| 0.02 | Ultra Suave (câmera bem lenta) |
+| 0.05 | Normal (padrão recomendado) |
+| 0.10 | Rápido (acompanha mais de perto) |
 
-### 🎥 Tracking Ultra Suave
-- **Alpha 0.02** (antes era 0.05) - câmera segue o rosto bem mais devagar
-- **Easing cubic** - transições de zoom com aceleração/desaceleração suave
-- Sem movimentos robóticos ou saltos bruscos
-
-### ⚙️ Parâmetros Configuráveis
-| Parâmetro | Padrão | Descrição |
-|-----------|--------|-----------|
-| `alpha` | 0.02 | Suavização do tracking (menor = mais lento) |
-| `zoom_duration` | 3.0s | Tempo de cada transição in/out |
-| `hold_duration` | 2.0s | Tempo parado em cada nível |
-| `initial_zoom` | 1.0 | Nível de zoom na visão ampla |
-| `target_zoom` | 1.4 | Nível de zoom no close-up (40% mais perto) |
+### ⚙️ Configuração via Interface
+- **"Advanced Face Settings"** no Gradio
+- **Slider "Tracking Smoothness"** para ajustar alpha
+- Aplica-se apenas ao modo YOLO
 
 **Tecnologias:**
 - 🔍 **YOLOv8** - Detecção e tracking de pessoas em tempo real
 - 📊 **ByteTrack** - IDs persistentes para cada pessoa
-- 📈 **EMA (Exponential Moving Average)** - Suavização com alpha=0.02
+- 📈 **EMA (Exponential Moving Average)** - Suavização configurável
 
 ### ⚡ Otimização T4 (WhisperX)
 Transcrição otimizada para GPUs T4 do Colab/Kaggle (16GB VRAM):

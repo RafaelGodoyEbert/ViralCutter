@@ -62,70 +62,21 @@ def init_yolo(model_name="yolov8n.pt"):
 
 class SmoothBBox:
     """
-    Exponential Moving Average (EMA) smoothing for bounding boxes with Cyclic Zoom.
-    Provides a "cinematic" camera effect: zoom in → hold → SNAP back → hold → repeat.
+    Exponential Moving Average (EMA) smoothing for bounding boxes.
+    Provides smooth face tracking without zoom effects.
     """
     
-    def __init__(self, alpha=0.02, fps=30, zoom_duration_seconds=3.0, 
-                 hold_seconds=2.0, initial_zoom=1.0, target_zoom=1.4):
+    def __init__(self, alpha=0.05):
         """
         Args:
             alpha: Smoothing factor (0.0 = no movement, 1.0 = instant snap)
-                   0.01-0.03 gives a very slow, smooth cinematic feel
-            fps: Video frames per second
-            zoom_duration_seconds: Time to zoom in OR out (one direction)
-            hold_seconds: Time to hold at each zoom level before reversing
-            initial_zoom: Wide view zoom level (1.0 = full frame)
-            target_zoom: Close-up zoom level (1.4 = 40% closer)
+                   0.05 = smooth but responsive tracking
         """
         self.alpha = alpha
         self.smooth_bbox = None
         self.target_bbox = None
         self.frames_without_detection = 0
         self.max_frames_hold = 90
-        
-        # Cyclic zoom parameters
-        self.fps = fps
-        self.zoom_duration_frames = int(fps * zoom_duration_seconds)
-        self.hold_frames = int(fps * hold_seconds)
-        self.initial_zoom = initial_zoom
-        self.target_zoom = target_zoom
-        self.current_frame = 0
-        self.current_zoom = initial_zoom
-        
-        # Full cycle: zoom_in (gradual) → hold (zoomed) → snap back (instant) → hold (wide)
-        # No gradual zoom out, so cycle = zoom_in + 2*hold
-        self.cycle_length = self.zoom_duration_frames + 2 * self.hold_frames
-    
-    def _ease_in_out_cubic(self, t):
-        """Smooth easing function for natural acceleration/deceleration."""
-        if t < 0.5:
-            return 4 * t * t * t
-        else:
-            return 1 - pow(-2 * t + 2, 3) / 2
-    
-    def get_progressive_zoom(self):
-        """
-        Calculate cyclic zoom level: zoom in → hold → SNAP back → hold → repeat.
-        Zoom out is INSTANT (snap), not gradual.
-        """
-        # Position within current cycle
-        cycle_pos = self.current_frame % self.cycle_length
-        
-        # Phase 1: ZOOM IN (0 to zoom_duration_frames) - GRADUAL
-        if cycle_pos < self.zoom_duration_frames:
-            progress = cycle_pos / self.zoom_duration_frames
-            eased = self._ease_in_out_cubic(progress)
-            return self.initial_zoom + (self.target_zoom - self.initial_zoom) * eased
-        
-        # Phase 2: HOLD at zoomed (zoom_duration to zoom_duration + hold)
-        elif cycle_pos < self.zoom_duration_frames + self.hold_frames:
-            return self.target_zoom
-        
-        # Phase 3: SNAP BACK to wide (INSTANT, not gradual)
-        # This happens immediately after hold phase
-        else:
-            return self.initial_zoom
     
     def update(self, detected_bbox):
         """
@@ -135,11 +86,8 @@ class SmoothBBox:
             detected_bbox: (x1, y1, x2, y2) or None if no detection
             
         Returns:
-            Tuple of (smoothed_bbox, current_zoom) or (None, current_zoom)
+            Tuple of (smoothed_bbox, zoom) - zoom is always 1.0 (no zoom)
         """
-        self.current_frame += 1
-        self.current_zoom = self.get_progressive_zoom()
-        
         if detected_bbox is not None:
             self.target_bbox = np.array(detected_bbox, dtype=float)
             self.frames_without_detection = 0
@@ -148,7 +96,7 @@ class SmoothBBox:
                 # First detection - snap to it
                 self.smooth_bbox = self.target_bbox.copy()
             else:
-                # Apply EMA smoothing (slower = more cinematic)
+                # Apply EMA smoothing
                 self.smooth_bbox = (
                     self.alpha * self.target_bbox + 
                     (1 - self.alpha) * self.smooth_bbox
@@ -158,19 +106,17 @@ class SmoothBBox:
             self.frames_without_detection += 1
             
             if self.frames_without_detection > self.max_frames_hold:
-                return None, self.current_zoom
+                return None, 1.0
         
         if self.smooth_bbox is not None:
-            return tuple(self.smooth_bbox.astype(int)), self.current_zoom
-        return None, self.current_zoom
+            return tuple(self.smooth_bbox.astype(int)), 1.0
+        return None, 1.0
     
     def reset(self):
         """Reset the smoother state."""
         self.smooth_bbox = None
         self.target_bbox = None
         self.frames_without_detection = 0
-        self.current_frame = 0
-        self.current_zoom = self.initial_zoom
 
 
 def get_best_encoder():
@@ -238,12 +184,9 @@ def crop_to_vertical(frame, center_x, center_y, frame_width, frame_height, zoom=
 
 
 def generate_short_yolo(input_file, output_file, index, project_folder, final_folder,
-                        face_mode="auto", no_face_mode="zoom", alpha=0.02,
-                        zoom_duration=3.0, hold_duration=2.0,
-                        initial_zoom=1.0, target_zoom=1.4):
+                        face_mode="auto", no_face_mode="zoom", alpha=0.05):
     """
-    Process video with YOLO tracking and CYCLIC SMOOTH ZOOM.
-    Zoom cycles: zoom in → hold → zoom out → hold → repeat.
+    Process video with YOLO tracking and smooth face following.
     
     Args:
         input_file: Path to input video
@@ -253,20 +196,14 @@ def generate_short_yolo(input_file, output_file, index, project_folder, final_fo
         final_folder: Final output folder
         face_mode: "auto", "1", or "2"
         no_face_mode: "zoom" or "padding" when no face detected
-        alpha: EMA smoothing factor (0.01-0.03 for slow cinematic movement)
-        zoom_duration: Seconds for each zoom in/out transition
-        hold_duration: Seconds to hold at each zoom level
-        initial_zoom: Wide view zoom level (1.0 = full frame)
-        target_zoom: Close-up zoom level (1.4 = 40% closer)
+        alpha: EMA smoothing factor (0.02=Ultra Smooth, 0.05=Normal, 0.10=Fast)
     """
     global YOLO_MODEL
     
     if not YOLO_AVAILABLE or YOLO_MODEL is None:
         raise RuntimeError("YOLO not initialized. Call init_yolo() first.")
     
-    cycle_time = 2 * zoom_duration + 2 * hold_duration
-    print(f"[YOLO] Processing with Cyclic Smooth Zoom: {input_file}")
-    print(f"[YOLO] Zoom cycle: {initial_zoom:.1f}x <-> {target_zoom:.1f}x (cycle: {cycle_time:.0f}s)")
+    print(f"[YOLO] Processing with smooth tracking (alpha={alpha}): {input_file}")
     
     cap = cv2.VideoCapture(input_file)
     if not cap.isOpened():
@@ -277,15 +214,8 @@ def generate_short_yolo(input_file, output_file, index, project_folder, final_fo
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    # Initialize smoother with cyclic zoom
-    smoother = SmoothBBox(
-        alpha=alpha, 
-        fps=fps, 
-        zoom_duration_seconds=zoom_duration,
-        hold_seconds=hold_duration,
-        initial_zoom=initial_zoom,
-        target_zoom=target_zoom
-    )
+    # Initialize smoother with alpha from UI
+    smoother = SmoothBBox(alpha=alpha)
     
     # Video writer
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
