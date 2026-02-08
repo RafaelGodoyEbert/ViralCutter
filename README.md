@@ -1,47 +1,63 @@
-# ViralCutter - Fork com Notebooks Kaggle e Colab
+# 🎬 ViralCutter - Smooth Zoom Edition
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/masterface77/ViralCutter/blob/main/ViralCutter-Colab.ipynb)
-[![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/code/levireis77/viralcutter-kaggle)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/masterface77/ViralCutter/blob/smooth-zoom/ViralCutter-SmoothZoom.ipynb)
+[![Open in Kaggle](https://kaggle.com/static/images/open-in-kaggle.svg)](https://www.kaggle.com/code/levireis77/viralcutter-kaggle-smoothzoom)
 [![Discord](https://dcbadge.limes.pink/api/server/tAdPHFAbud)](https://discord.gg/tAdPHFAbud)
 
-> **Fork customizado** com notebooks otimizados para Kaggle e Google Colab. Para o repositório original completo, [veja abaixo](#viralcutter-original).
+> **🎯 Branch `smooth-zoom`** - Versão com câmera suave que segue o rosto usando YOLO + EMA Smoothing!
 
-Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) - alternativa gratuita ao `opus.pro` e ao `vidyo.ai` para criar cortes automáticos de vídeos longos (podcasts, lives, etc.) em clipes virais para Reels/Shorts/TikTok usando IA.
+Fork do [ViralCutter](https://github.com/RafaelGodoyEbert/ViralCutter) com **Smooth Zoom** - efeito cinematográfico de câmera que segue o rosto suavemente, sem movimentos robóticos.
+
+---
+
+## ✨ O que é o Smooth Zoom?
+
+![Smooth Zoom Demo](https://img.shields.io/badge/🎥-Câmera_Suave-blueviolet?style=for-the-badge)
+
+**Antes:** Câmera pula de posição em posição (robótico)  
+**Depois:** Câmera "flutua" suavemente seguindo o rosto (cinematográfico)
+
+### Como Funciona
+```
+Frame 1: Rosto detectado em (100, 200)
+         → Câmera move para (100, 200)
+
+Frame 2: Rosto move para (150, 210)
+         → EMA suaviza: câmera em ~(103, 201) ao invés de pular
+
+Frame 3: Rosto em (160, 215)
+         → Câmera em ~(106, 202) - movimento suave e natural
+```
+
+**Tecnologias:**
+- 🔍 **YOLOv8** - Detecção e tracking de pessoas em tempo real
+- 📊 **ByteTrack** - IDs persistentes para cada pessoa
+- 📈 **EMA (Exponential Moving Average)** - Suavização com alpha=0.05
+
+---
 
 ## 🚀 Notebooks Disponíveis
 
-### 🔵 Google Colab
+### 🔵 Colab - Smooth Zoom
 **Características:**
-- ✅ Instalação rápida (3-5 min)
+- ✅ YOLO Smooth Zoom **ATIVADO POR PADRÃO**
 - ✅ Upload automático para Google Drive
-- ✅ Otimizado para GPUs T4 (Faster-Whisper integrado)
-- ❌ Zoom inteligente removido (mais leve)
-
-> **💡 Otimização T4**: Usa `faster-whisper` com modelo quantizado para transcrição eficiente na GPU limitada do Colab.
+- ✅ Otimizado para GPUs T4
+- ✅ Instalação rápida (3-5 min)
 
 **Como usar:**
-1. Abra o notebook no Colab [clicando aqui](https://colab.research.google.com/github/masterface77/ViralCutter/blob/main/ViralCutter-Colab.ipynb)
+1. Abra o notebook [ViralCutter-SmoothZoom.ipynb](https://colab.research.google.com/github/masterface77/ViralCutter/blob/smooth-zoom/ViralCutter-SmoothZoom.ipynb)
 2. Execute a célula principal
-3. Aguarde a instalação
+3. Aguarde a instalação (inclui `ultralytics`)
 4. Clique no link `gradio.live` gerado
-5. Processe seus vídeos - os cortes irão automaticamente para seu Drive!
+5. Face Model já vem selecionado como **yolo** 🎯
 
-### 🟠 Kaggle  
+### 🟠 Kaggle - Smooth Zoom  
 **Características:**
 - ✅ 30h/semana de GPU grátis
 - ✅ Upload OAuth para sua conta Drive
-- ✅ Suporte a datasets persistentes
-- ✅ Documentação completa de configuração
-- ✅ Faster-Whisper otimizado para T4
-
-> **💡 Otimização T4**: Ambos notebooks usam `faster-whisper` que é mais eficiente em memória. Recomendado usar modelo `large-v2` quantizado para melhor performance na T4.
-
-**Como usar:**
-1. **Configure os datasets primeiro** (veja seção abaixo)
-2. Abra o notebook no Kaggle [clicando aqui](https://www.kaggle.com/code/levireis77/viralcutter-kaggle)
-3. Execute a célula principal
-4. Faça a autenticação OAuth quando solicitado
-5. Clique no link `gradio.live` gerado
+- ✅ YOLO Smooth Zoom incluído
+- ✅ Suporte a cookies e datasets
 
 ---
 
