@@ -30,7 +30,11 @@ def crop_and_resize_single_face(frame, face):
 
         # Recorte e redimensionamento para 1080x1920 (9:16)
         crop_img = frame[crop_y:crop_y2, crop_x:crop_x2]
-        resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_AREA)
+        # Use Lanczos for better upscaling quality
+        resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
+        # Apply unsharp mask to recover sharpness lost in zoom
+        gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
+        resized = cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
 
         return resized
 
@@ -56,7 +60,7 @@ def resize_with_padding(frame):
         result[pad_top:pad_top+frame_height, pad_left:pad_left+frame_width] = frame
 
         # Redimensionar para as dimensões finais
-        return cv2.resize(result, (1080, 1920), interpolation=cv2.INTER_AREA)
+        return cv2.resize(result, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
 
 def detect_face_or_body(frame, face_detection, face_mesh, pose):
     # Converter a imagem para RGB
@@ -134,6 +138,9 @@ def crop_center_zoom(frame):
     
     crop_img = frame[start_y:start_y+new_height, start_x:start_x+new_width]
     
-    # Resize to final 1080x1920
-    return cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_AREA)
+    # Resize to final 1080x1920 with Lanczos for better quality
+    resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
+    # Apply unsharp mask to recover sharpness lost in zoom
+    gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
+    return cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
 

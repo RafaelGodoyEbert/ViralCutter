@@ -178,9 +178,12 @@ def crop_to_vertical(frame, center_x, center_y, frame_width, frame_height, zoom=
     crop_x = max(0, min(crop_x, frame_width - crop_width))
     crop_y = max(0, min(crop_y, frame_height - crop_height))
     
-    # Extract and resize
+    # Extract and resize with Lanczos for better quality
     crop = frame[crop_y:crop_y+crop_height, crop_x:crop_x+crop_width]
-    return cv2.resize(crop, (1080, 1920), interpolation=cv2.INTER_AREA)
+    resized = cv2.resize(crop, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
+    # Apply unsharp mask to recover sharpness lost in zoom
+    gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
+    return cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
 
 
 def generate_short_yolo(input_file, output_file, index, project_folder, final_folder,
@@ -323,8 +326,11 @@ def _finalize_video(input_file, output_file, index, fps, project_folder, final_f
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-stats",
             "-i", output_file,
             "-i", audio_file,
-            "-c:v", encoder_name, "-preset", encoder_preset, "-b:v", "5M",
+            "-c:v", encoder_name, "-preset", encoder_preset,
+            "-crf", "18",  # Visually lossless quality
+            "-b:v", "8M",  # Increased max bitrate
             "-c:a", "aac", "-b:a", "192k",
+            "-pix_fmt", "yuv420p",  # YouTube/TikTok compatibility
             "-r", str(fps),
             final_output
         ]

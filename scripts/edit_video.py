@@ -181,8 +181,11 @@ def finalize_video(input_file, output_file, index, fps, project_folder, final_fo
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-stats",
             "-i", output_file,
             "-i", audio_file,
-            "-c:v", encoder_name, "-preset", encoder_preset, "-b:v", "5M",
+            "-c:v", encoder_name, "-preset", encoder_preset,
+            "-crf", "18",  # Visually lossless quality
+            "-b:v", "8M",  # Increased max bitrate
             "-c:a", "aac", "-b:a", "192k",
+            "-pix_fmt", "yuv420p",  # YouTube/TikTok compatibility
             "-r", str(fps),
             final_output
         ]
