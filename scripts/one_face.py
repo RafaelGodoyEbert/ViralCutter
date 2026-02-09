@@ -4,6 +4,13 @@ import os
 import subprocess
 import mediapipe as mp
 
+# Import quality enhancement functions
+try:
+    from scripts.video_quality import enhance_frame
+    QUALITY_AVAILABLE = True
+except ImportError:
+    QUALITY_AVAILABLE = False
+
 def crop_and_resize_single_face(frame, face):
         frame_height, frame_width = frame.shape[:2]
 
@@ -32,9 +39,14 @@ def crop_and_resize_single_face(frame, face):
         crop_img = frame[crop_y:crop_y2, crop_x:crop_x2]
         # Use Lanczos for better upscaling quality
         resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
-        # Apply unsharp mask to recover sharpness lost in zoom
-        gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
-        resized = cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
+        
+        # Apply full enhancement pipeline: Denoise -> Color Grading -> Unsharp
+        if QUALITY_AVAILABLE:
+            resized = enhance_frame(resized, preset_name="high")
+        else:
+            # Fallback to basic unsharp if module not available
+            gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
+            resized = cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
 
         return resized
 
@@ -140,7 +152,12 @@ def crop_center_zoom(frame):
     
     # Resize to final 1080x1920 with Lanczos for better quality
     resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
-    # Apply unsharp mask to recover sharpness lost in zoom
-    gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
-    return cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
+    
+    # Apply full enhancement pipeline: Denoise -> Color Grading -> Unsharp
+    if QUALITY_AVAILABLE:
+        return enhance_frame(resized, preset_name="high")
+    else:
+        # Fallback to basic unsharp
+        gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
+        return cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
 

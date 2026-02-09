@@ -140,6 +140,14 @@ def get_best_encoder():
     return ("libx264", "ultrafast")
 
 
+# Import quality enhancement functions
+try:
+    from scripts.video_quality import enhance_frame
+    QUALITY_AVAILABLE = True
+except ImportError:
+    QUALITY_AVAILABLE = False
+
+
 def crop_to_vertical(frame, center_x, center_y, frame_width, frame_height, zoom=1.0):
     """
     Crop frame to 9:16 aspect ratio centered on (center_x, center_y) with progressive zoom.
@@ -181,9 +189,14 @@ def crop_to_vertical(frame, center_x, center_y, frame_width, frame_height, zoom=
     # Extract and resize with Lanczos for better quality
     crop = frame[crop_y:crop_y+crop_height, crop_x:crop_x+crop_width]
     resized = cv2.resize(crop, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
-    # Apply unsharp mask to recover sharpness lost in zoom
-    gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
-    return cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
+    
+    # Apply full enhancement pipeline: Denoise -> Color Grading -> Unsharp
+    if QUALITY_AVAILABLE:
+        return enhance_frame(resized, preset_name="high")
+    else:
+        # Fallback to basic unsharp
+        gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
+        return cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
 
 
 def generate_short_yolo(input_file, output_file, index, project_folder, final_folder,
@@ -328,7 +341,7 @@ def _finalize_video(input_file, output_file, index, fps, project_folder, final_f
             "-i", audio_file,
             "-c:v", encoder_name, "-preset", encoder_preset,
             "-crf", "18",  # Visually lossless quality
-            "-b:v", "8M",  # Increased max bitrate
+            "-b:v", "12M",  # Increased max bitrate for quality
             "-c:a", "aac", "-b:a", "192k",
             "-pix_fmt", "yuv420p",  # YouTube/TikTok compatibility
             "-r", str(fps),
