@@ -25,7 +25,7 @@ QUALITY_PRESETS = {
         "contrast": 1.05,
         "saturation": 1.1,
         "crf": 18,
-        "max_bitrate": "12M",
+        "max_bitrate": "25M",
     },
     "max": {
         "interpolation": cv2.INTER_LANCZOS4,
@@ -34,7 +34,7 @@ QUALITY_PRESETS = {
         "contrast": 1.08,
         "saturation": 1.15,
         "crf": 15,
-        "max_bitrate": "15M",
+        "max_bitrate": "35M",
     }
 }
 

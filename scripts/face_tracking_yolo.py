@@ -341,7 +341,7 @@ def _finalize_video(input_file, output_file, index, fps, project_folder, final_f
             "-i", audio_file,
             "-c:v", encoder_name, "-preset", encoder_preset,
             "-crf", "18",  # Visually lossless quality
-            "-b:v", "12M",  # Increased max bitrate for quality
+            "-b:v", "25M",  # 4K quality bitrate
             "-c:a", "aac", "-b:a", "192k",
             "-pix_fmt", "yuv420p",  # YouTube/TikTok compatibility
             "-r", str(fps),
