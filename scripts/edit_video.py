@@ -12,6 +12,15 @@ except ImportError:
     INSIGHTFACE_AVAILABLE = False
     print("InsightFace not found or error importing. Install with: pip install insightface onnxruntime-gpu")
 
+# YOLO Tracking (Smooth Zoom)
+try:
+    from scripts.face_tracking_yolo import init_yolo, generate_short_yolo, is_yolo_available
+    YOLO_TRACKING_AVAILABLE = True
+except ImportError:
+    YOLO_TRACKING_AVAILABLE = False
+    print("YOLO Tracking not available. Install with: pip install ultralytics")
+
+
 
 # Global cache for encoder
 CACHED_ENCODER = None
@@ -1084,7 +1093,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     return "1"
 
 
-def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, segments_data=None, no_face_mode="padding"):
+def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, tracking_alpha=0.05, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, segments_data=None, no_face_mode="padding"):
     # Lazy init solutions only when needed to avoid AttributeError if import failed partially
     mp_face_detection = None
     mp_face_mesh = None
@@ -1099,10 +1108,24 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
     
     # Priority: User Choice -> Fallbacks
     
+    # NEW: YOLO Tracking (Smooth Zoom) - highest priority if selected
+    yolo_working = False
+    if YOLO_TRACKING_AVAILABLE and face_model == "yolo":
+        try:
+            print("Initializing YOLO Tracking (Smooth Zoom)...")
+            if init_yolo():
+                yolo_working = True
+                print("YOLO Tracking Initialized Successfully!")
+            else:
+                print("WARNING: YOLO init returned False. Will try InsightFace.")
+        except Exception as e:
+            print(f"WARNING: YOLO Initialization Failed ({e}). Will try InsightFace.")
+            yolo_working = False
+    
     insightface_working = False
     
-    # Only init InsightFace if selected or default
-    if INSIGHTFACE_AVAILABLE and (face_model == "insightface"):
+    # Only init InsightFace if selected or default (and YOLO not working)
+    if INSIGHTFACE_AVAILABLE and (face_model == "insightface" or (face_model == "yolo" and not yolo_working)):
         try:
             print("Initializing InsightFace...")
             init_insightface()
@@ -1111,6 +1134,7 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
         except Exception as e:
             print(f"WARNING: InsightFace Initialization Failed ({e}). Will try MediaPipe.")
             insightface_working = False
+
 
     mediapipe_working = False
     use_haar = False
@@ -1176,8 +1200,25 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
             success = False
             detected_mode = "1" # Default if detection fails or fallback
 
+            # 0. Try YOLO (Smooth Zoom) - NEW
+            if yolo_working and not success:
+                try:
+                    print(f"[YOLO Smooth Zoom] Processing: {input_filename}")
+                    res = generate_short_yolo(input_file, output_file, index, 
+                                              project_folder, final_folder,
+                                              face_mode=face_mode,
+                                              no_face_mode=no_face_mode,
+                                              alpha=tracking_alpha)
+                    if res: detected_mode = res
+                    success = True
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    print(f"YOLO processing failed for {input_filename}: {e}")
+                    print("Falling back to InsightFace...")
+
             # 1. Try InsightFace
-            if insightface_working:
+            if insightface_working and not success:
                 try:
                     # Capture returned mode
                     res = generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode=face_mode, detection_period=detection_period, 
@@ -1194,6 +1235,7 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
                     traceback.print_exc()
                     print(f"InsightFace processing failed for {input_filename}: {e}")
                     print("Falling back to MediaPipe/Haar...")
+
             
             # 2. Try MediaPipe if InsightFace failed or not available
             if not success and mediapipe_working:

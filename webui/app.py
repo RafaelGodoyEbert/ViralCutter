@@ -179,7 +179,7 @@ def apply_experimental_preset(preset_name):
 
 
 def run_viral_cutter(input_source, project_name, url, video_file, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, no_face_mode, 
-                     face_filter_thresh, face_two_thresh, face_conf_thresh, face_dead_zone, focus_active_speaker, active_speaker_mar, active_speaker_score_diff, include_motion, active_speaker_motion_threshold, active_speaker_motion_sensitivity, active_speaker_decay,
+                     tracking_alpha, face_filter_thresh, face_two_thresh, face_conf_thresh, face_dead_zone, focus_active_speaker, active_speaker_mar, active_speaker_score_diff, include_motion, active_speaker_motion_threshold, active_speaker_motion_sensitivity, active_speaker_decay,
                      use_custom_subs, font_name, font_size, font_color, highlight_color, outline_color, outline_thickness, shadow_color, shadow_size, is_bold, is_italic, is_uppercase, vertical_pos, alignment,
                      h_size, w_block, gap, mode, under, strike, border_s, remove_punc, video_quality, use_youtube_subs, translate_target):
     
@@ -248,6 +248,7 @@ def run_viral_cutter(input_source, project_name, url, video_file, segments, vira
 
     workflow_map = {"Full": "1", "Cut Only": "2", "Subtitles Only": "3"}
     cmd.extend(["--workflow", workflow_map.get(workflow, "1")])
+    print(f"[DEBUG] Using face_model: {face_model}")
     cmd.extend(["--face-model", face_model])
     cmd.extend(["--face-mode", face_mode])
     if face_detect_interval: cmd.extend(["--face-detect-interval", str(face_detect_interval)])
@@ -258,6 +259,7 @@ def run_viral_cutter(input_source, project_name, url, video_file, segments, vira
     if face_two_thresh is not None: cmd.extend(["--face-two-threshold", str(face_two_thresh)])
     if face_conf_thresh is not None: cmd.extend(["--face-confidence-threshold", str(face_conf_thresh)])
     if face_dead_zone is not None: cmd.extend(["--face-dead-zone", str(face_dead_zone)])
+    if tracking_alpha is not None: cmd.extend(["--tracking-alpha", str(tracking_alpha)])
 
 
     
@@ -479,7 +481,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     model_input = gr.Dropdown(["tiny", "small", "medium", "large", "large-v1", "large-v2", "large-v3", "turbo", "large-v3-turbo", "distil-large-v2", "distil-medium.en", "distil-small.en", "distil-large-v3"], label=i18n("Whisper Model"), value="large-v3-turbo")
                     with gr.Row():
                         workflow_input = gr.Dropdown(choices=[(i18n("Full"), "Full"), (i18n("Cut Only"), "Cut Only"), (i18n("Subtitles Only"), "Subtitles Only")], label=i18n("Workflow"), value="Full")
-                        face_model_input = gr.Dropdown(["insightface", "mediapipe"], label=i18n("Face Model"), value="insightface")
+                        face_model_input = gr.Dropdown(["yolo", "insightface", "mediapipe"], label=i18n("Face Model"), value="yolo", info="YOLO = Smooth Zoom")
                     with gr.Row():
                         face_mode_input = gr.Dropdown(choices=[(i18n("Auto"), "auto"), ("1", "1"), ("2", "2")], label=i18n("Face Mode"), value="auto")
                         face_detect_interval_input = gr.Textbox(label=i18n("Face Det. Interval"), value="0.17,1.0")
@@ -490,6 +492,15 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     input_source.change(on_source_change, inputs=input_source, outputs=[url_input, project_selector, video_upload, workflow_input])
              
              with gr.Accordion(i18n("Advanced Face Settings"), open=False):
+                 # Tracking Smoothness Slider (YOLO only)
+                 gr.Markdown(f"### {i18n('Camera Tracking')}")
+                 tracking_alpha_input = gr.Slider(
+                     label=i18n("Tracking Smoothness"), 
+                     minimum=0.01, maximum=0.15, value=0.05, step=0.01,
+                     info=i18n("0.02 = Ultra Suave (lento) | 0.05 = Normal | 0.10 = Rápido")
+                 )
+                 
+                 gr.Markdown(f"### {i18n('Face Detection')}")
                  face_preset_input = gr.Dropdown(choices=[(i18n(k), k) for k in FACE_PRESETS.keys()], label=i18n("Configuration Presets"), value="Default (Balanced)", interactive=True)
                  with gr.Row():
                       face_filter_thresh_input = gr.Slider(label=i18n("Ignore Small Faces (0.0 - 1.0)"), minimum=0.0, maximum=1.0, value=0.35, step=0.05, info=i18n("Relative size to ignore background."))
@@ -629,7 +640,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                  input_source, project_selector, url_input, video_upload, segments_input, viral_input, themes_input, min_dur_input, max_dur_input, 
                  model_input, ai_backend_input, api_key_input, ai_model_input, chunk_size_input, 
                  workflow_input, face_model_input, face_mode_input, face_detect_interval_input, no_face_mode_input, 
-                 face_filter_thresh_input, face_two_thresh_input, face_conf_thresh_input, face_dead_zone_input, focus_active_speaker_input, 
+                 tracking_alpha_input, face_filter_thresh_input, face_two_thresh_input, face_conf_thresh_input, face_dead_zone_input, focus_active_speaker_input, 
                  active_speaker_mar_input, active_speaker_score_diff_input, include_motion_input, active_speaker_motion_threshold_input, active_speaker_motion_sensitivity_input, active_speaker_decay_input,
                  use_custom_subs, 
                  # Expanded Manual Inputs mapping
@@ -838,6 +849,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--colab", action="store_true", help="Run in Google Colab mode")
+    parser.add_argument("--face-model", default="insightface", help="Default face model (env var VIRALCUTTER_FACE_MODEL takes precedence for UI default)")
     args = parser.parse_args()
 
     if args.colab:
