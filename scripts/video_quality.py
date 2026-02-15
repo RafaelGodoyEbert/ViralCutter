@@ -12,6 +12,9 @@ QUALITY_PRESETS = {
     "standard": {
         "interpolation": cv2.INTER_LANCZOS4,
         "denoise_strength": 0.0,  # No denoise
+        "auto_illumination": False,  # No auto-light
+        "unsharp_kernel": (0, 0),  # Auto kernel
+        "unsharp_sigma": 3.0,
         "unsharp_strength": 0.8,
         "contrast": 1.0,
         "saturation": 1.0,
@@ -21,7 +24,11 @@ QUALITY_PRESETS = {
     "high": {
         "interpolation": cv2.INTER_LANCZOS4,
         "denoise_strength": 1.5,  # Light denoise
-        "unsharp_strength": 0.8,
+        "auto_illumination": True,  # Opus-style auto brightness/contrast
+        "auto_illumination_clip_limit": 2.0,  # CLAHE clip limit (subtle)
+        "unsharp_kernel": (5, 5),  # Fixed kernel — Visual Opus (FFmpeg unsharp=5:5:1.0)
+        "unsharp_sigma": 1.0,
+        "unsharp_strength": 1.0,  # Stronger sharpening for upscale recovery
         "contrast": 1.05,
         "saturation": 1.1,
         "crf": 18,
@@ -30,7 +37,11 @@ QUALITY_PRESETS = {
     "max": {
         "interpolation": cv2.INTER_LANCZOS4,
         "denoise_strength": 2.0,  # Stronger denoise
-        "unsharp_strength": 1.0,
+        "auto_illumination": True,  # Opus-style auto brightness/contrast
+        "auto_illumination_clip_limit": 3.0,  # Higher clip = more correction
+        "unsharp_kernel": (5, 5),  # Fixed kernel — Visual Opus
+        "unsharp_sigma": 1.0,
+        "unsharp_strength": 1.2,  # Aggressive sharpening
         "contrast": 1.08,
         "saturation": 1.15,
         "crf": 15,
@@ -77,6 +88,36 @@ def apply_denoise(frame, strength=1.5):
     return denoised
 
 
+def apply_auto_illumination(frame, clip_limit=2.0):
+    """
+    Opus-style automatic illumination adjustment.
+    Uses CLAHE (Contrast Limited Adaptive Histogram Equalization) on the
+    luminance channel to normalize brightness and contrast automatically.
+    Preserves colors while fixing dark/overexposed areas.
+    
+    Args:
+        frame: Input BGR frame (numpy array)
+        clip_limit: CLAHE clip limit (1.0-4.0, default 2.0)
+                    2.0 = subtle/natural, 3.0 = stronger correction
+    
+    Returns:
+        Illumination-corrected frame
+    """
+    # Convert to LAB color space (L = luminance, A/B = color)
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l_channel, a_channel, b_channel = cv2.split(lab)
+    
+    # Apply CLAHE only to luminance — preserves original colors
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(8, 8))
+    l_corrected = clahe.apply(l_channel)
+    
+    # Merge back and convert to BGR
+    lab_corrected = cv2.merge([l_corrected, a_channel, b_channel])
+    result = cv2.cvtColor(lab_corrected, cv2.COLOR_LAB2BGR)
+    
+    return result
+
+
 def apply_color_grading(frame, contrast=1.05, saturation=1.1):
     """
     Apply color grading to make video look more "expensive".
@@ -106,14 +147,17 @@ def apply_color_grading(frame, contrast=1.05, saturation=1.1):
     return frame
 
 
-def apply_unsharp_mask(frame, strength=0.8):
+def apply_unsharp_mask(frame, strength=1.0, kernel=(5, 5), sigma=1.0):
     """
     Apply unsharp mask to recover sharpness lost during upscaling.
+    Calibrated to match FFmpeg unsharp=5:5:1.0 (Visual Opus quality).
     
     Args:
         frame: Input BGR frame (numpy array)
-        strength: Sharpening strength (0.0-2.0, default 0.8)
-                  0.8 = subtle, 1.0 = normal, 1.2 = aggressive
+        strength: Sharpening strength (0.0-2.0, default 1.0)
+                  0.8 = subtle, 1.0 = Visual Opus, 1.2 = aggressive
+        kernel: Gaussian kernel size, e.g. (5,5). Use (0,0) for auto.
+        sigma: Gaussian sigma (1.0 = Visual Opus standard)
     
     Returns:
         Sharpened frame
@@ -121,8 +165,8 @@ def apply_unsharp_mask(frame, strength=0.8):
     if strength <= 0:
         return frame
     
-    # Create Gaussian blur
-    gaussian = cv2.GaussianBlur(frame, (0, 0), 3.0)
+    # Create Gaussian blur with configurable kernel and sigma
+    gaussian = cv2.GaussianBlur(frame, kernel, sigma)
     
     # Apply unsharp mask: original + strength * (original - blurred)
     sharpened = cv2.addWeighted(frame, 1.0 + strength, gaussian, -strength, 0)
@@ -132,8 +176,14 @@ def apply_unsharp_mask(frame, strength=0.8):
 
 def enhance_frame(frame, preset_name=None):
     """
-    Apply full enhancement pipeline to a frame.
-    Order: Denoise -> Color Grading -> Unsharp (sharpness last!)
+    Apply full Opus-style enhancement pipeline to a frame.
+    Order: Denoise → Auto Illumination → Color Grading → Unsharp (sharpness last!)
+    
+    Pipeline matches Opus Clip quality filters:
+    1. Denoising — removes grain and compression artifacts
+    2. Auto Illumination — normalizes brightness/contrast automatically (CLAHE)
+    3. Color Grading — contrast + saturation boost for "polished" look
+    4. Sharpening — reinforces edges and fine details (unsharp mask)
     
     Args:
         frame: Input BGR frame (already resized to target size)
@@ -144,14 +194,24 @@ def enhance_frame(frame, preset_name=None):
     """
     preset = get_quality_preset(preset_name)
     
-    # 1. Denoise (clean compression artifacts)
+    # 1. Denoise (clean compression artifacts and grain)
     frame = apply_denoise(frame, preset["denoise_strength"])
     
-    # 2. Color grading (contrast + saturation)
+    # 2. Auto Illumination (normalize brightness/contrast — Opus-style)
+    if preset.get("auto_illumination", False):
+        clip_limit = preset.get("auto_illumination_clip_limit", 2.0)
+        frame = apply_auto_illumination(frame, clip_limit=clip_limit)
+    
+    # 3. Color grading (contrast + saturation for polished look)
     frame = apply_color_grading(frame, preset["contrast"], preset["saturation"])
     
-    # 3. Unsharp mask (sharpness - ALWAYS LAST)
-    frame = apply_unsharp_mask(frame, preset["unsharp_strength"])
+    # 4. Unsharp mask (sharpness - reinforces edges, ALWAYS LAST)
+    frame = apply_unsharp_mask(
+        frame, 
+        strength=preset["unsharp_strength"],
+        kernel=preset.get("unsharp_kernel", (5, 5)),
+        sigma=preset.get("unsharp_sigma", 1.0)
+    )
     
     return frame
 

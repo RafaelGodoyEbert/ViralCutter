@@ -74,6 +74,65 @@ def resize_with_padding(frame):
         # Redimensionar para as dimensões finais
         return cv2.resize(result, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
 
+def resize_with_blur_background(frame):
+    """
+    Composição de camadas: vídeo original nítido no centro + fundo desfocado (Blur Background).
+    Preserva a qualidade nativa da imagem sem crop agressivo.
+    Usa downscale antes do blur para economia de memória (~75% menos RAM).
+    """
+    frame_height, frame_width = frame.shape[:2]
+    target_w, target_h = 1080, 1920
+    target_ar = target_w / target_h  # 9/16 = 0.5625
+
+    # === Background Layer (desfocado, preenche tudo) ===
+    # Downscale para economia de memória antes do blur
+    small_w, small_h = target_w // 2, target_h // 2  # 540x960
+
+    # Fill-crop para o aspect ratio 9:16
+    src_ar = frame_width / frame_height
+    if src_ar > target_ar:
+        # Mais largo que o target → crop lateral
+        new_h = small_h
+        new_w = int(small_h * src_ar)
+    else:
+        # Mais alto que o target → crop vertical
+        new_w = small_w
+        new_h = int(small_w / src_ar)
+
+    bg_small = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    
+    # Center crop to exact 540x960
+    cx, cy = new_w // 2, new_h // 2
+    x1 = max(0, cx - small_w // 2)
+    y1 = max(0, cy - small_h // 2)
+    bg_small = bg_small[y1:y1 + small_h, x1:x1 + small_w]
+
+    # Gaussian Blur no frame pequeno (kernel grande para desfoque forte)
+    bg_small = cv2.GaussianBlur(bg_small, (51, 51), 0)
+
+    # Upscale para resolução final
+    background = cv2.resize(bg_small, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+
+    # === Foreground Layer (nítido, aspect ratio original mantido) ===
+    if src_ar > target_ar:
+        # Fit by width
+        fg_w = target_w
+        fg_h = int(target_w / src_ar)
+    else:
+        # Fit by height
+        fg_h = target_h
+        fg_w = int(target_h * src_ar)
+
+    foreground = cv2.resize(frame, (fg_w, fg_h), interpolation=cv2.INTER_LANCZOS4)
+
+    # === Composição: foreground centralizado sobre background ===
+    pad_top = (target_h - fg_h) // 2
+    pad_left = (target_w - fg_w) // 2
+    background[pad_top:pad_top + fg_h, pad_left:pad_left + fg_w] = foreground
+
+    return background
+
+
 def detect_face_or_body(frame, face_detection, face_mesh, pose):
     # Converter a imagem para RGB
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)

@@ -284,10 +284,11 @@ def generate_short_yolo(input_file, output_file, index, project_folder, final_fo
         smoothed, current_zoom = smoother.update(best_bbox)
         
         if smoothed is not None:
-            # Calculate face center
+            # Calculate face center — offset Y to head/shoulders for "talking head" framing
             x1, y1, x2, y2 = smoothed
             center_x = (x1 + x2) / 2
-            center_y = (y1 + y2) / 2
+            # Offset: 30% from top of bbox = head/shoulders area (not torso center)
+            center_y = y1 + (y2 - y1) * 0.30
             
             # Crop and resize with progressive zoom
             result = crop_to_vertical(frame, center_x, center_y, 
@@ -298,6 +299,10 @@ def generate_short_yolo(input_file, output_file, index, project_folder, final_fo
                 # Center crop with current zoom level
                 result = crop_to_vertical(frame, frame_width/2, frame_height/2,
                                          frame_width, frame_height, zoom=current_zoom)
+            elif no_face_mode == "blur":
+                # Blur Background (import from one_face)
+                from scripts.one_face import resize_with_blur_background
+                result = resize_with_blur_background(frame)
             else:
                 # Padding (import from one_face)
                 from scripts.one_face import resize_with_padding

@@ -3,7 +3,7 @@ import numpy as np
 import os
 import subprocess
 import mediapipe as mp
-from scripts.one_face import crop_and_resize_single_face, resize_with_padding, detect_face_or_body, crop_center_zoom
+from scripts.one_face import crop_and_resize_single_face, resize_with_padding, resize_with_blur_background, detect_face_or_body, crop_center_zoom
 from scripts.two_face import crop_and_resize_two_faces, detect_face_or_body_two_faces
 try:
     from scripts.face_detection_insightface import init_insightface, detect_faces_insightface, crop_and_resize_insightface
@@ -150,6 +150,8 @@ def generate_short_fallback(input_file, output_file, index, project_folder, fina
         
         if no_face_mode == "zoom":
              result = crop_center_zoom(frame)
+        elif no_face_mode == "blur":
+             result = resize_with_blur_background(frame)
         else:
              result = resize_with_padding(frame)
         
@@ -348,6 +350,8 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
             else:
                 if no_face_mode == "zoom":
                     result = crop_center_zoom(frame)
+                elif no_face_mode == "blur":
+                    result = resize_with_blur_background(frame)
                 else:
                     result = resize_with_padding(frame)
                 coordinate_log.append({"frame": frame_index, "faces": []})
@@ -367,6 +371,8 @@ def generate_short_mediapipe(input_file, output_file, index, face_mode, project_
                  else:
                      if no_face_mode == "zoom":
                          result = crop_center_zoom(frame)
+                     elif no_face_mode == "blur":
+                         result = resize_with_blur_background(frame)
                      else:
                          result = resize_with_padding(frame)
             
@@ -461,6 +467,8 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
             # No face detected for a while -> Center/Padding fallback
             if no_face_mode == "zoom":
                 result = crop_center_zoom(frame)
+            elif no_face_mode == "blur":
+                result = resize_with_blur_background(frame)
             else:
                 result = resize_with_padding(frame)
             out.write(result)
@@ -975,6 +983,8 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
             # Fallback for this frame
             if no_face_mode == "zoom":
                 result = crop_center_zoom(frame)
+            elif no_face_mode == "blur":
+                result = resize_with_blur_background(frame)
             else:
                 result = resize_with_padding(frame)
             out.write(result)
