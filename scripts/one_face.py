@@ -72,7 +72,13 @@ def resize_with_padding(frame):
         result[pad_top:pad_top+frame_height, pad_left:pad_left+frame_width] = frame
 
         # Redimensionar para as dimensões finais
-        return cv2.resize(result, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
+        result = cv2.resize(result, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
+        
+        # Apply full enhancement pipeline
+        if QUALITY_AVAILABLE:
+            result = enhance_frame(result, preset_name="high")
+        
+        return result
 
 def resize_with_blur_background(frame):
     """
@@ -129,6 +135,10 @@ def resize_with_blur_background(frame):
     pad_top = (target_h - fg_h) // 2
     pad_left = (target_w - fg_w) // 2
     background[pad_top:pad_top + fg_h, pad_left:pad_left + fg_w] = foreground
+
+    # Apply full enhancement pipeline
+    if QUALITY_AVAILABLE:
+        background = enhance_frame(background, preset_name="high")
 
     return background
 

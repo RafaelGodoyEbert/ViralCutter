@@ -14,6 +14,13 @@ try:
 except ImportError:
     INSIGHTFACE_AVAILABLE = False
 
+# Import quality enhancement functions
+try:
+    from scripts.video_quality import enhance_frame
+    QUALITY_AVAILABLE = True
+except ImportError:
+    QUALITY_AVAILABLE = False
+
 app = None
 
 @contextmanager
@@ -139,8 +146,16 @@ def crop_and_resize_insightface(frame, face_bbox, target_width=1080, target_heig
     # Crop
     cropped = frame[crop_y1:crop_y2, crop_x1:crop_x2]
     
-    # Resize to final target
-    result = cv2.resize(cropped, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
+    # Resize to final target with Lanczos for better quality
+    result = cv2.resize(cropped, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
+    
+    # Apply full enhancement pipeline: Denoise -> Color Grading -> Unsharp
+    if QUALITY_AVAILABLE:
+        result = enhance_frame(result, preset_name="high")
+    else:
+        # Fallback to basic unsharp if module not available
+        gaussian = cv2.GaussianBlur(result, (0, 0), 3.0)
+        result = cv2.addWeighted(result, 1.8, gaussian, -0.8, 0)
     
     return result
 
