@@ -93,67 +93,68 @@ def detect_faces_insightface(frame):
 
 def crop_and_resize_insightface(frame, face_bbox, target_width=1080, target_height=1920):
     """
-    Crops and resizes the frame to target dimensions centered on the face_bbox.
+    Crops and resizes the frame centered on face_bbox.
+    Uses wider crop + blur background for landscape sources (less zoom, better quality).
     face_bbox: [x1, y1, x2, y2]
     """
     h, w, _ = frame.shape
     x1, y1, x2, y2 = face_bbox
-    
     face_center_x = (x1 + x2) // 2
-    face_center_y = (y1 + y2) // 2
     
-    # Calculate crop area based on target aspect ratio and face position
-    # We want to keep the face roughly in the upper-middle or center?
-    # Usually center for simple implementation, or slightly upper for "talking head".
+    target_ar = target_width / target_height  # 0.5625
     
-    # Logic similar to one_face.py but adapted
+    # Calculate tight 9:16 crop (minimum width)
+    tight_w = int(h * target_ar)
+    if tight_w > w:
+        tight_w = w
     
-    # Determine the scaling factor to ensure the crop covers the target height
-    # Ideally we want the height of the video to match the target height after resize
-    # But usually we source from landscape (16:9) to portrait (9:16).
-    # We need to crop a 9:16 area from the source.
+    # Wider crop: show ~42% of source width (less zoom, more context)
+    wide_w = int(w * 0.42)
     
-    # Calculate source crop height/width maintaining 9:16 ratio
-    # Trying to maximize height usage of the source frame usually.
+    # Pick the wider option for less zoom
+    source_w = min(max(tight_w, wide_w), w)
+    source_h = h  # Always use full height
     
-    # Let's say we want to use the full height of the source if possible
-    source_h = h
-    source_w = int(source_h * (target_width / target_height))
+    # Center crop on face horizontally
+    crop_x = max(0, min(face_center_x - source_w // 2, w - source_w))
     
-    if source_w > w:
-        # If the calculated width is wider than the source image, we are limited by width
-        source_w = w
-        source_h = int(source_w * (target_height / target_width))
-
-    # Calculate top-left corner of the crop
-    crop_x1 = face_center_x - (source_w // 2)
-    crop_y1 = face_center_y - (source_h // 2) # Center vertically on face
+    cropped = frame[0:source_h, crop_x:crop_x + source_w]
     
-    # Adjust to stay within bounds
-    if crop_x1 < 0: 
-        crop_x1 = 0
-    elif crop_x1 + source_w > w:
-        crop_x1 = w - source_w
+    crop_ar = source_w / source_h
+    
+    if abs(crop_ar - target_ar) < 0.03:
+        # Crop is already ~9:16 (portrait/square source) → direct resize
+        result = cv2.resize(cropped, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
+    else:
+        # Wider than 9:16 → compose with blur background (TikTok/Reels style)
+        # 1. Create blur background (fill-crop source to 9:16, then blur)
+        bg_crop_w = min(int(h * target_ar), w)
+        bg_x = (w - bg_crop_w) // 2
+        bg_slice = frame[0:h, bg_x:bg_x + bg_crop_w]
+        bg_small = cv2.resize(bg_slice, (target_width // 2, target_height // 2), interpolation=cv2.INTER_AREA)
+        bg_small = cv2.GaussianBlur(bg_small, (51, 51), 0)
+        result = cv2.resize(bg_small, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
         
-    if crop_y1 < 0:
-        crop_y1 = 0
-    elif crop_y1 + source_h > h:
-        crop_y1 = h - source_h
+        # 2. Scale foreground to fit target width
+        scale = target_width / source_w
+        fg_w = target_width
+        fg_h = int(source_h * scale)
         
-    crop_x2 = crop_x1 + source_w
-    crop_y2 = crop_y1 + source_h
-    
-    # Crop
-    cropped = frame[crop_y1:crop_y2, crop_x1:crop_x2]
-    
-    # Resize to final target with Lanczos for better quality
-    result = cv2.resize(cropped, (target_width, target_height), interpolation=cv2.INTER_LANCZOS4)
+        if fg_h > target_height:
+            fg_h = target_height
+            fg_w = int(source_w * (target_height / source_h))
+        
+        foreground = cv2.resize(cropped, (fg_w, fg_h), interpolation=cv2.INTER_LANCZOS4)
+        
+        # 3. Center vertically on canvas
+        pad_top = (target_height - fg_h) // 2
+        pad_left = (target_width - fg_w) // 2
+        result[pad_top:pad_top + fg_h, pad_left:pad_left + fg_w] = foreground
     
     # Apply full enhancement pipeline: Denoise -> Color Grading -> Unsharp
     if QUALITY_AVAILABLE:
         result = enhance_frame(result, preset_name="high")
     else:
-        # Fallback to basic unsharp if module not available
         gaussian = cv2.GaussianBlur(result, (0, 0), 3.0)
         result = cv2.addWeighted(result, 1.8, gaussian, -0.8, 0)
     

@@ -150,6 +150,8 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
     # Mapeamento de Qualidade
     quality_map = {
         "best": 'bestvideo+bestaudio/best',
+        "4k": 'bestvideo[height<=2160]+bestaudio/best',
+        "1440p": 'bestvideo[height<=1440]+bestaudio/best',
         "1080p": 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
         "720p": 'bestvideo[height<=720]+bestaudio/best[height<=720]',
         "480p": 'bestvideo[height<=480]+bestaudio/best[height<=480]'

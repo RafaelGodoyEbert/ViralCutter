@@ -401,7 +401,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     video_upload = gr.File(label=i18n("Upload Video"), file_count="single", file_types=["video"], visible=False)
                     
                     with gr.Row():
-                        video_quality_input = gr.Dropdown(choices=["best", "1080p", "720p", "480p"], label=i18n("Video Quality"), value="best")
+                        video_quality_input = gr.Dropdown(choices=["best", "4k", "1440p", "1080p", "720p", "480p"], label=i18n("Video Quality"), value="4k")
                         translate_input = gr.Dropdown(choices=["None", "pt", "en", "es", "fr", "de", "it", "ru", "ja", "ko", "zh-CN"], label=i18n("Translate Subtitles To"), value="None")
                         use_youtube_subs_input = gr.Checkbox(label=i18n("Use YouTube Subs"), value=True, info=i18n("Download and use official subtitles if available. (Recommended, it speeds up the process)"))
 

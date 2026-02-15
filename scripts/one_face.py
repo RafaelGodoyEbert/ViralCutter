@@ -16,35 +16,59 @@ def crop_and_resize_single_face(frame, face):
 
         x, y, w, h = face
         face_center_x = x + w // 2
-        face_center_y = y + h // 2
 
-        # Cálculo da proporção desejada (9:16)
-        target_aspect_ratio = 9 / 16
+        target_w, target_h = 1080, 1920
+        target_ar = target_w / target_h  # 0.5625
 
-        # Cálculo da área de corte para evitar barras pretas
-        if frame_width / frame_height > target_aspect_ratio:
-            new_width = int(frame_height * target_aspect_ratio)
-            new_height = frame_height
+        # Calculate tight 9:16 crop (minimum width)
+        tight_w = int(frame_height * target_ar)
+        if tight_w > frame_width:
+            tight_w = frame_width
+
+        # Wider crop: show ~42% of source width (less zoom, more context)
+        wide_w = int(frame_width * 0.42)
+
+        # Pick wider option for less zoom
+        source_w = min(max(tight_w, wide_w), frame_width)
+        source_h = frame_height
+
+        # Center crop on face horizontally
+        crop_x = max(0, min(face_center_x - source_w // 2, frame_width - source_w))
+
+        cropped = frame[0:source_h, crop_x:crop_x + source_w]
+
+        crop_ar = source_w / source_h
+
+        if abs(crop_ar - target_ar) < 0.03:
+            # Already ~9:16 → direct resize
+            resized = cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
         else:
-            new_width = frame_width
-            new_height = int(frame_width / target_aspect_ratio)
+            # Wider → compose with blur background (TikTok/Reels style)
+            bg_crop_w = min(int(frame_height * target_ar), frame_width)
+            bg_x = (frame_width - bg_crop_w) // 2
+            bg_slice = frame[0:frame_height, bg_x:bg_x + bg_crop_w]
+            bg_small = cv2.resize(bg_slice, (target_w // 2, target_h // 2), interpolation=cv2.INTER_AREA)
+            bg_small = cv2.GaussianBlur(bg_small, (51, 51), 0)
+            resized = cv2.resize(bg_small, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
 
-        # Garantir que o corte esteja dentro dos limites
-        crop_x = max(0, min(face_center_x - new_width // 2, frame_width - new_width))
-        crop_y = max(0, min(face_center_y - new_height // 2, frame_height - new_height))
-        crop_x2 = crop_x + new_width
-        crop_y2 = crop_y + new_height
+            scale = target_w / source_w
+            fg_w = target_w
+            fg_h = int(source_h * scale)
 
-        # Recorte e redimensionamento para 1080x1920 (9:16)
-        crop_img = frame[crop_y:crop_y2, crop_x:crop_x2]
-        # Use Lanczos for better upscaling quality
-        resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
-        
+            if fg_h > target_h:
+                fg_h = target_h
+                fg_w = int(source_w * (target_h / source_h))
+
+            foreground = cv2.resize(cropped, (fg_w, fg_h), interpolation=cv2.INTER_LANCZOS4)
+
+            pad_top = (target_h - fg_h) // 2
+            pad_left = (target_w - fg_w) // 2
+            resized[pad_top:pad_top + fg_h, pad_left:pad_left + fg_w] = foreground
+
         # Apply full enhancement pipeline: Denoise -> Color Grading -> Unsharp
         if QUALITY_AVAILABLE:
             resized = enhance_frame(resized, preset_name="high")
         else:
-            # Fallback to basic unsharp if module not available
             gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
             resized = cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
 
@@ -195,38 +219,59 @@ def detect_face_or_body(frame, face_detection, face_mesh, pose):
 
 def crop_center_zoom(frame):
     """
-    Crops the center of the frame to fill 9:16 aspect ratio (Zoom effect).
+    Center crop with blur background for 9:16 output.
+    Uses wider crop (less zoom) to preserve quality.
     """
     frame_height, frame_width = frame.shape[:2]
-    target_aspect_ratio = 9 / 16
+    target_w, target_h = 1080, 1920
+    target_ar = target_w / target_h  # 0.5625
     
-    # Calculate crop dimensions to FILL the target ratio
-    if frame_width / frame_height > target_aspect_ratio:
-        # Source is wider than target (e.g. 16:9 source, 9:16 target) -> Crop Width
-        new_width = int(frame_height * target_aspect_ratio)
-        new_height = frame_height
+    # Calculate tight 9:16 crop
+    tight_w = int(frame_height * target_ar)
+    if tight_w > frame_width:
+        tight_w = frame_width
+    
+    # Wider crop: show ~42% of source width
+    wide_w = int(frame_width * 0.42)
+    
+    source_w = min(max(tight_w, wide_w), frame_width)
+    source_h = frame_height
+    
+    # Center crop
+    crop_x = (frame_width - source_w) // 2
+    cropped = frame[0:source_h, crop_x:crop_x + source_w]
+    
+    crop_ar = source_w / source_h
+    
+    if abs(crop_ar - target_ar) < 0.03:
+        resized = cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
     else:
-        # Source is taller than target -> Crop Height
-        new_width = frame_width
-        new_height = int(frame_width / target_aspect_ratio)
+        # Blur background composite
+        bg_crop_w = min(int(frame_height * target_ar), frame_width)
+        bg_x = (frame_width - bg_crop_w) // 2
+        bg_slice = frame[0:frame_height, bg_x:bg_x + bg_crop_w]
+        bg_small = cv2.resize(bg_slice, (target_w // 2, target_h // 2), interpolation=cv2.INTER_AREA)
+        bg_small = cv2.GaussianBlur(bg_small, (51, 51), 0)
+        resized = cv2.resize(bg_small, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
         
-    start_x = (frame_width - new_width) // 2
-    start_y = (frame_height - new_height) // 2
+        scale = target_w / source_w
+        fg_w = target_w
+        fg_h = int(source_h * scale)
+        
+        if fg_h > target_h:
+            fg_h = target_h
+            fg_w = int(source_w * (target_h / source_h))
+        
+        foreground = cv2.resize(cropped, (fg_w, fg_h), interpolation=cv2.INTER_LANCZOS4)
+        
+        pad_top = (target_h - fg_h) // 2
+        pad_left = (target_w - fg_w) // 2
+        resized[pad_top:pad_top + fg_h, pad_left:pad_left + fg_w] = foreground
     
-    # Ensure bounds
-    start_x = max(0, start_x)
-    start_y = max(0, start_y)
-    
-    crop_img = frame[start_y:start_y+new_height, start_x:start_x+new_width]
-    
-    # Resize to final 1080x1920 with Lanczos for better quality
-    resized = cv2.resize(crop_img, (1080, 1920), interpolation=cv2.INTER_LANCZOS4)
-    
-    # Apply full enhancement pipeline: Denoise -> Color Grading -> Unsharp
+    # Apply full enhancement pipeline
     if QUALITY_AVAILABLE:
         return enhance_frame(resized, preset_name="high")
     else:
-        # Fallback to basic unsharp
         gaussian = cv2.GaussianBlur(resized, (0, 0), 3.0)
         return cv2.addWeighted(resized, 1.8, gaussian, -0.8, 0)
 

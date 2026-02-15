@@ -136,7 +136,7 @@ def main():
     parser.add_argument("--active-speaker-motion-sensitivity", type=float, default=0.05, help="Motion sensitivity multiplier (default: 0.05)")
     parser.add_argument("--active-speaker-decay", type=float, default=2.0, help="Activity score decay rate (default: 2.0)")
     parser.add_argument("--skip-prompts", action="store_true", help="Skip interactive prompts and use defaults/existing files")
-    parser.add_argument("--video-quality", choices=["best", "1080p", "720p", "480p"], default="best", help="Video download quality")
+    parser.add_argument("--video-quality", choices=["best", "4k", "1440p", "1080p", "720p", "480p"], default="best", help="Video download quality")
     parser.add_argument("--skip-youtube-subs", action="store_true", help="Skip downloading YouTube subtitles")
     parser.add_argument("--translate-target", help="Target language code for subtitle translation (e.g. 'pt', 'en').")
 
