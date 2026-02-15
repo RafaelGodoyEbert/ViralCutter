@@ -118,15 +118,16 @@ def main():
 
     parser.add_argument("--project-path", help="Path to existing project folder (overrides URL/Latest)")
     parser.add_argument("--workflow", choices=["1", "2", "3"], default="1", help="Workflow choice: 1=Full, 2=Cut Only, 3=Subtitles Only")
-    parser.add_argument("--face-model", choices=["insightface", "mediapipe"], default="insightface", help="Face detection model")
+    parser.add_argument("--face-model", choices=["yolo", "insightface", "mediapipe"], default="insightface", help="Face detection model: 'yolo' (Smooth Zoom), 'insightface' (default), 'mediapipe'")
     parser.add_argument("--face-mode", choices=["auto", "1", "2"], default="auto", help="Face tracking mode: auto, 1, 2")
     parser.add_argument("--subtitle-config", help="Path to subtitle configuration JSON file")
-    parser.add_argument("--no-face-mode", choices=["padding", "zoom"], default="padding", help="Method to handle segments with no face detected: 'padding' (9:16 frame with black bars) or 'zoom' (Center Crop Zoom)")
+    parser.add_argument("--no-face-mode", choices=["padding", "zoom", "blur"], default="padding", help="Method to handle segments with no face detected: 'padding' (9:16 frame with black bars), 'zoom' (Center Crop Zoom), or 'blur' (Blur Background - original centered with blurred fill)")
     parser.add_argument("--face-detect-interval", type=str, default="0.17,1.0", help="Face detection interval in seconds. Single value or 'interval_1face,interval_2face'")
     parser.add_argument("--face-filter-threshold", type=float, default=0.35, help="Relative area threshold to ignore background faces (default: 0.35)")
     parser.add_argument("--face-two-threshold", type=float, default=0.60, help="Relative area threshold to trigger 2-face mode (default: 0.60)")
     parser.add_argument("--face-confidence-threshold", type=float, default=0.30, help="Face detection confidence threshold (0.0 - 1.0) (default: 0.30)")
     parser.add_argument("--face-dead-zone", type=str, default="40", help="Camera movement dead zone in pixels (default: 40)") # str to support future "auto"
+    parser.add_argument("--tracking-alpha", type=float, default=0.05, help="Camera tracking smoothness (0.02=Ultra Smooth, 0.05=Normal, 0.10=Fast)")
     parser.add_argument("--focus-active-speaker", action="store_true", help="Enable experimental active speaker focus (InsightFace only)")
     parser.add_argument("--active-speaker-mar", type=float, default=0.03, help="Mouth Aspect Ratio threshold for active speaker (0.0 - 1.0) (default: 0.03)")
     parser.add_argument("--active-speaker-score-diff", type=float, default=1.5, help="Score difference to focus on active speaker (default: 1.5)")
@@ -135,7 +136,7 @@ def main():
     parser.add_argument("--active-speaker-motion-sensitivity", type=float, default=0.05, help="Motion sensitivity multiplier (default: 0.05)")
     parser.add_argument("--active-speaker-decay", type=float, default=2.0, help="Activity score decay rate (default: 2.0)")
     parser.add_argument("--skip-prompts", action="store_true", help="Skip interactive prompts and use defaults/existing files")
-    parser.add_argument("--video-quality", choices=["best", "1080p", "720p", "480p"], default="best", help="Video download quality")
+    parser.add_argument("--video-quality", choices=["best", "4k", "1440p", "1080p", "720p", "480p"], default="best", help="Video download quality")
     parser.add_argument("--skip-youtube-subs", action="store_true", help="Skip downloading YouTube subtitles")
     parser.add_argument("--translate-target", help="Target language code for subtitle translation (e.g. 'pt', 'en').")
 
@@ -569,6 +570,7 @@ def main():
                 two_face_threshold=args.face_two_threshold,
                 confidence_threshold=args.face_confidence_threshold,
                 dead_zone=dead_zone_val,
+                tracking_alpha=args.tracking_alpha,
                 focus_active_speaker=args.focus_active_speaker,
                 active_speaker_mar=args.active_speaker_mar,
                 active_speaker_score_diff=args.active_speaker_score_diff,

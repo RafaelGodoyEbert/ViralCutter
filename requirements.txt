@@ -5,6 +5,7 @@ whisperx
 mediapipe
 google-genai
 insightface
+ultralytics
 onnxruntime-gpu
 gradio
 opencv-python

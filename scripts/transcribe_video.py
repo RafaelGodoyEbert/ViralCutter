@@ -165,7 +165,7 @@ def parse_vtt(vtt_path):
         return None
     return segments
 
-def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
+def transcribe(input_file, model_name='large-v2', project_folder='tmp', language=None):
     print(i18n(f"Iniciando transcrição de {input_file}..."))
     
     # Diagnóstico de Ambiente
@@ -192,10 +192,14 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
         print(f"Os arquivos SRT, TSV e JSON já existem. Pulando a transcrição.")
         return srt_file, tsv_file
 
-    # Device Setup
+    # Device Setup - Optimized for T4 GPUs (Colab/Kaggle)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"DEBUG: Usando dispositivo: {device}")
-    compute_type = "float16" if device == "cuda" else "float32"
+    
+    # Use int8_float16 for T4 GPUs (16GB VRAM) - better memory efficiency
+    # int8 quantization reduces VRAM usage by ~50% with minimal quality loss
+    compute_type = "int8_float16" if device == "cuda" else "float32"
+    print(f"DEBUG: Compute type: {compute_type} (T4 optimizado)")
 
     try:
         apply_safe_globals_hack()
@@ -216,8 +220,10 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
         start_segments = None
         alignment_only = False
         
-        # Default blind guess if we have no info
-        detected_language = "en" 
+        # Use forced language if provided, otherwise detect
+        detected_language = language if language else "pt"  # Default to Portuguese
+        language_forced = language is not None
+        print(f"DEBUG: Idioma {'forçado' if language_forced else 'padrão'}: {detected_language}") 
 
         if potential_subs:
             sub_path = potential_subs[0]
@@ -249,20 +255,26 @@ def transcribe(input_file, model_name='large-v3', project_folder='tmp'):
             # Mas o align recebe segments como lista.
             pass 
         else:
-            # 3. Transcrever (Caminho Normal)
+            # 3. Transcrever (Caminho Normal) - Optimized for T4 GPUs
             print("Nenhuma legenda válida encontrada. Realizando transcrição completa (WhisperX)...")
-            print(f"Carregando modelo {model_name}...")
+            print(f"Carregando modelo {model_name} (compute_type={compute_type})...")
+            
+            # Batch size 8 for T4 (16GB VRAM) - prevents OOM on long podcasts
+            # For higher VRAM GPUs, can increase to 16 or 24
+            t4_batch_size = 8
+            
             model = whisperx.load_model(
                 model_name, 
                 device, 
                 compute_type=compute_type,
+                language=detected_language if not language_forced else language,
                 asr_options={"hotwords": None}
             )
 
             result = model.transcribe(
                 audio, 
-                batch_size=16, 
-                chunk_size=10
+                batch_size=t4_batch_size,
+                chunk_size=15  # Slightly larger chunks for efficiency
             )
             
             detected_language = result["language"]

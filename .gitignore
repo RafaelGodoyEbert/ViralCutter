@@ -1,0 +1,42 @@
+# Arquivos temporários
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# Ambientes virtuais
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Credenciais (NUNCA fazer commit)
+*secret*.json
+*credentials*.json
+*cookie*.txt
+*api*.txt
+*.pem
+
+# Arquivos de processamento
+VIRALS/
+*.mp4
+*.mp3
+*.wav
+
+# Scripts temporários
+add_docs.py

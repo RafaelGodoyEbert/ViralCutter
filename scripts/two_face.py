@@ -2,6 +2,13 @@ import cv2
 import mediapipe as mp
 import numpy as np
 
+# Import quality enhancement functions
+try:
+    from scripts.video_quality import enhance_frame
+    QUALITY_AVAILABLE = True
+except ImportError:
+    QUALITY_AVAILABLE = False
+
 def crop_and_maintain_ar(frame, face_box, target_w, target_h, zoom_out_factor=2.2):
     """
     Recorta uma região baseada no rosto mantendo o aspect ratio do target.
@@ -75,7 +82,7 @@ def crop_and_maintain_ar(frame, face_box, target_w, target_h, zoom_out_factor=2.
 
     # Redimensionar para o tamanho alvo final (1080x960)
     # Como garantimos o AR, o resize mantém a proporção correta
-    resized = cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+    resized = cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
     return resized
 
 def crop_and_resize_two_faces(frame, face_positions, zoom_out_factor=2.2):
@@ -99,6 +106,14 @@ def crop_and_resize_two_faces(frame, face_positions, zoom_out_factor=2.2):
     
     # Compor imagem final (Stack Vertical)
     result_frame = np.vstack((face1_img, face2_img))
+    
+    # Apply full enhancement pipeline: Denoise -> Color Grading -> Unsharp
+    if QUALITY_AVAILABLE:
+        result_frame = enhance_frame(result_frame, preset_name="high")
+    else:
+        # Fallback to basic unsharp if module not available
+        gaussian = cv2.GaussianBlur(result_frame, (0, 0), 3.0)
+        result_frame = cv2.addWeighted(result_frame, 1.8, gaussian, -0.8, 0)
     
     return result_frame
 
