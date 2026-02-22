@@ -49,15 +49,39 @@ Esqueça assinaturas caras e limites de minutos. O ViralCutter oferece poder ili
 
 ## Instalação Local (Super Rápida ⚡)
 
-### Pré-requisitos
-- Python 3.10+
-- FFmpeg instalado no sistema
-- **GPU NVIDIA** (Altamente recomendada para velocidade e funcionalidades de IA local)
+### Pré-requisitos (Instalação "do zero")
 
-### Passo a Passo
+Para rodar o ViralCutter em um computador novo, você precisa instalar os seguintes programas essenciais:
 
-1.  **Instale as dependências**
-    Execute o script `install_dependencies.bat`. Ele usa o gerenciador `uv` para configurar tudo em segundos.
+1. **Ferramentas de Build do Visual Studio (C++ Build Tools)**
+   Necessário para compilar o `insightface` e evitar erros "Cpp/Visual Studio".
+   - Baixe o [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+   - Abra o instalador e marque **"Desenvolvimento para Desktop com C++"** (*Desktop development with C++*).
+   - Certifique-se de que *Windows 10/11 SDK* e *MSVC v143 - VS 2022 C++* estejam marcados à direita e instale. Reinicie o PC se necessário.
+
+2. **Python (3.10.x ou 3.11.x recomendados)**
+   - Baixe em [python.org/downloads](https://www.python.org/downloads/).
+   - ⚠️ **MUITO IMPORTANTE:** Na primeira tela de instalação, marque a caixa **"Add Python to PATH"** no rodapé antes de clicar em instalar.
+
+3. **FFmpeg** (Processamento de áudio/vídeo)
+   - A forma mais rápida no Windows é abrir o terminal (PowerShell) como Administrador e digitar:
+     `winget install ffmpeg`
+   - Reinicie o terminal e digite `ffmpeg -version` para checar se instalou corretamente.
+
+4. **Drivers da Placa de Vídeo (NVIDIA)**
+   - Mantenha os drivers atualizados (via GeForce Experience ou site oficial) para usar a aceleração CUDA 12.4+.
+   - **GPU NVIDIA** é fortemente recomendada para velocidade e IAs locais.
+
+---
+
+### Passo a Passo da Instalação
+
+1.  **Instale as dependências via Script**
+    Acesse a pasta do ViralCutter e escolha **um dos instaladores** abaixo com duplo clique:
+    *   `install_dependencies.bat`: Instalação **padrão** (Recomendada). Mais rápida e à prova de falhas. Usa IAs como Gemini (Grátis) e GPT-4 pela internet.
+    *   `install_dependencies_advanced_LocalLLM.bat`: Instalação **avançada**. Dedicada para quem quer rodar IAs 100% offline no hardware (Llama 3, etc). Exige placa de vídeo boa e as ferramentas *C++ Build Tools*.
+    
+    *(Ambos usam o gerenciador `uv` para configurar tudo automaticamente).*
 
 2.  **Configurar IA (Opcional)**
     -   **Gemini (Recomendado/Free)**: Adicione sua chave em `api_config.json`.

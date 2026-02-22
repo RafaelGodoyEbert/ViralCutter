@@ -13,15 +13,13 @@ uv venv
 
 echo.
 echo ==========================================
-echo Instalando dependencias essenciais do requirements.txt...
-echo (IAs em Nuvem / Sem Modelos Locais)
+echo Instalando TODAS as dependencias (INCLUINDO MODELOS LOCAIS LLM)
+echo Atenção: Processo mais demorado. Requer C++ Build Tools.
 echo ==========================================
-:: Ativa o venv temporariamente para o install (uv gerencia isso automaticamente se detectar o venv, mas vamos garantir)
-:: Se o uv venv criou a pasta .venv, o uv pip install vai usar ela por padrao se estiver na raiz.
-uv pip install -r requirements.txt
+uv pip install -r requirements_advanced_LocalLLM.txt
 
 echo.
 echo ==========================================
-echo Concluido!
+echo Concluido! O ViralCutter esta pronto para rodar Modelos Locais.
 echo ==========================================
 pause

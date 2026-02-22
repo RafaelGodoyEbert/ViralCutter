@@ -49,15 +49,39 @@ Forget expensive subscriptions and minute limits. ViralCutter offers unlimited p
 
 ## Local Installation (Super Fast ⚡)
 
-### Prerequisites
-- Python 3.10+
-- FFmpeg installed on the system
-- **NVIDIA GPU** (Highly recommended for speed and local AI features)
+### Prerequisites (From Scratch Setup)
 
-### Step-by-Step
+To run ViralCutter on a fresh computer, you need to install the following core tools:
 
-1.  **Install Dependencies**
-    Run the `install_dependencies.bat` script. It uses `uv` manager to set everything up in seconds.
+1. **Visual Studio C++ Build Tools**
+   Required to compile `insightface` and avoid "Cpp/Visual Studio" setup errors.
+   - Download [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+   - Run the installer and check the **"Desktop development with C++"** box.
+   - Ensure *Windows 10/11 SDK* and *MSVC v143 - VS 2022 C++* are checked on the right panel, then click install. Restart your PC if prompted.
+
+2. **Python (3.10.x or 3.11.x recommended)**
+   - Download from [python.org/downloads](https://www.python.org/downloads/).
+   - ⚠️ **VERY IMPORTANT:** On the very first setup screen, mark the checkbox **"Add Python to PATH"** at the bottom before clicking install.
+
+3. **FFmpeg** (Audio/Video Processing Engine)
+   - The easiest way on Windows is to open your terminal (PowerShell) as Administrator and run:
+     `winget install ffmpeg`
+   - Restart the terminal and type `ffmpeg -version` to confirm it works.
+
+4. **Video Card Drivers (NVIDIA)**
+   - Keep your drivers updated (via GeForce Experience or the Nvidia website) to support CUDA 12.4+ acceleration.
+   - **NVIDIA GPU** is highly recommended for speed and local AI operations.
+
+---
+
+### Step-by-Step Installation
+
+1.  **Install Dependencies via Script**
+    Open the ViralCutter folder and double-click **one of the installers** below:
+    *   `install_dependencies.bat`: **Standard** installation (Recommended). Faster and fail-proof. Uses cloud AIs like Gemini (Free) and GPT-4.
+    *   `install_dependencies_advanced_LocalLLM.bat`: **Advanced** installation. Dedicated for users who want to run full offline AIs on their hardware (Llama 3, etc). Requires a good GPU and *C++ Build Tools*.
+    
+    *(Both use the `uv` package manager to set everything up automatically).*
 
 2.  **Configure AI (Optional)**
     -   **Gemini (Recommended/Free)**: Add your key in `api_config.json`.
