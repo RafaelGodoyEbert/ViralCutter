@@ -41,6 +41,14 @@ def apply_safe_globals_hack():
     except Exception as e:
         print(f"Aviso ao tentar aplicar patch de globals: {e}")
 
+    try:
+        import torchaudio
+        if not hasattr(torchaudio, 'list_audio_backends'):
+            torchaudio.list_audio_backends = lambda: []
+            print("Aplicado monkeypatch em torchaudio.list_audio_backends para PyTorch >= 2.4.")
+    except Exception as e:
+        pass
+
 def parse_srt(srt_path):
     """
     Parses an SRT file into a list of segments expected by WhisperX alignment.

@@ -1,3 +1,5 @@
+# Outras dependencias essenciais
+numpy<2.1.0
 g4f[all]
 yt-dlp
 ffmpeg-python
@@ -5,15 +7,10 @@ whisperx
 mediapipe
 google-genai
 insightface
-onnxruntime-gpu
 gradio
 opencv-python
-numpy
 psutil
 fastapi
 uvicorn
-torch
 deep-translator
 tqdm
-
-
