@@ -110,8 +110,8 @@ def main():
     parser.add_argument("--max-duration", type=int, default=90, help="Maximum segment duration (seconds)")
     parser.add_argument("--model", default="large-v3-turbo", help="Whisper model to use")
     
-    parser.add_argument("--ai-backend", choices=["manual", "gemini", "g4f", "local"], help="AI backend for viral analysis")
-    parser.add_argument("--api-key", help="Gemini API Key (required if ai-backend is gemini)")
+    parser.add_argument("--ai-backend", choices=["manual", "gemini", "g4f", "local", "twelvelabs"], help="AI backend for viral analysis")
+    parser.add_argument("--api-key", help="API Key for the chosen backend (Gemini, or TwelveLabs if ai-backend is twelvelabs)")
     
     parser.add_argument("--chunk-size", help="Override Chunk Size")
     parser.add_argument("--ai-model-name", help="Override AI Model Name")
@@ -312,12 +312,15 @@ def main():
                 print(i18n("2. G4F (Free / Experimental)"))
                 print(i18n("3. Local (GGUF via llama.cpp)"))
                 print(i18n("4. Manual (Copy/Paste Prompt)"))
-                choice = input(i18n("Choose (1-4): ")).strip()
-                
+                print(i18n("5. TwelveLabs Pegasus (Analyzes the video, not just the transcript)"))
+                choice = input(i18n("Choose (1-5): ")).strip()
+
                 if choice == "1":
                     ai_backend = "gemini"
                 elif choice == "2":
                     ai_backend = "g4f"
+                elif choice == "5":
+                    ai_backend = "twelvelabs"
                 elif choice == "3":
                     ai_backend = "local"
                     # Interactive model selection for local
@@ -363,6 +366,19 @@ def main():
              else:
                  print(i18n("Gemini API Key not found in api_config.json or arguments."))
                  api_key = input(i18n("Enter your Gemini API Key: ")).strip()
+
+        # TwelveLabs (Pegasus) key: arg -> config -> env -> prompt
+        if ai_backend == "twelvelabs" and not api_key:
+            cfg_key = api_config.get("twelvelabs", {}).get("api_key", "")
+            if cfg_key:
+                api_key = cfg_key
+            elif os.environ.get("TWELVELABS_API_KEY"):
+                api_key = os.environ.get("TWELVELABS_API_KEY")
+            elif args.skip_prompts:
+                print(i18n("TwelveLabs API key missing, but skip-prompts is ON. Might fail."))
+            else:
+                print(i18n("TwelveLabs API Key not found in api_config.json, arguments or TWELVELABS_API_KEY."))
+                api_key = input(i18n("Enter your TwelveLabs API Key: ")).strip()
 
     # Workflow & Face Config Inputs
     workflow_choice = args.workflow
@@ -477,7 +493,8 @@ def main():
                         api_key=api_key,
                         project_folder=project_folder,
                         chunk_size_arg=args.chunk_size,
-                        model_name_arg=args.ai_model_name
+                        model_name_arg=args.ai_model_name,
+                        video_url=url
                     )
                 
                 if not viral_segments or not viral_segments.get("segments"):

@@ -14,3 +14,5 @@ fastapi
 uvicorn
 deep-translator
 tqdm
+# Optional: TwelveLabs Pegasus backend (video-native viral analysis)
+twelvelabs>=1.2.8

@@ -155,6 +155,11 @@ G4F_MODELS = [
     'qwen-2.5-72b'
 ]
 
+TWELVELABS_MODELS = [
+    'pegasus1.5',
+    'pegasus1.2'
+]
+
 def get_local_models():
     if not os.path.exists(MODELS_DIR): return []
     return [f for f in os.listdir(MODELS_DIR) if f.endswith(".gguf")]
@@ -426,7 +431,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         max_dur_input = gr.Number(label=i18n("Max Duration (s)"), value=90)
                 with gr.Column(scale=1):
                     with gr.Row():
-                        ai_backend_input = gr.Dropdown(choices=[(i18n("Gemini"), "gemini"), (i18n("G4F"), "g4f"), (i18n("Local (GGUF)"), "local"), (i18n("Manual"), "manual")], label=i18n("AI Backend"), value="gemini", scale=2)
+                        ai_backend_input = gr.Dropdown(choices=[(i18n("Gemini"), "gemini"), (i18n("G4F"), "g4f"), (i18n("Local (GGUF)"), "local"), (i18n("Manual"), "manual"), (i18n("TwelveLabs Pegasus"), "twelvelabs")], label=i18n("AI Backend"), value="gemini", scale=2)
                         api_key_input = gr.Textbox(label=i18n("Gemini API Key"), type="password", scale=3)
                     
                     # New Dynamic Inputs
@@ -437,7 +442,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     
                     # Update listeners with logic to hide/show API key
                     def update_ai_ui(backend):
-                        show_api = (backend == "gemini")
+                        show_api = (backend in ("gemini", "twelvelabs"))
                         show_refresh = (backend == "local")
                         
                         # Definições padrão para evitar que fiquem vazios
@@ -458,6 +463,10 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                             new_choices = models if models else [i18n("No models found")]
                             new_val = new_choices[0]
                             new_chunk = 30000
+                        elif backend == "twelvelabs":
+                            new_choices = TWELVELABS_MODELS
+                            new_val = TWELVELABS_MODELS[0]
+                            new_chunk = 70000  # ignored: Pegasus reads the whole video, no chunking
                         else: # Manual
                              pass
 

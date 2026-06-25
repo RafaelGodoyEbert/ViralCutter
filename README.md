@@ -86,6 +86,7 @@ Para rodar o ViralCutter em um computador novo, você precisa instalar os seguin
 2.  **Configurar IA (Opcional)**
     -   **Gemini (Recomendado/Free)**: Adicione sua chave em `api_config.json`.
     -   **Local (GGUF)**: Baixe seus modelos `.gguf` favoritos e coloque na pasta `models/`. O ViralCutter irá detectá-los automaticamente.
+    -   **TwelveLabs Pegasus (Nativo de vídeo)**: O Pegasus analisa o **vídeo em si** (imagem + áudio), e não só a transcrição, para detectar os momentos mais virais. Adicione sua chave em `twelvelabs.api_key` no `api_config.json` (ou defina a variável de ambiente `TWELVELABS_API_KEY`) e selecione o backend `5` / `--ai-backend twelvelabs`. Requer a URL do vídeo de origem. Pegue uma API key gratuita em [twelvelabs.io](https://twelvelabs.io) (tier gratuito generoso).
 
 3.  **Rodar**
     -   Duplo clique em `run_webui.bat` para abrir a interface no navegador.
