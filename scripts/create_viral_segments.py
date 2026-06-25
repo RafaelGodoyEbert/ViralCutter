@@ -33,6 +33,12 @@ try:
 except ImportError:
     HAS_LLAMA_CPP = False
 
+try:
+    from twelvelabs import TwelveLabs
+    HAS_TWELVELABS = True
+except ImportError:
+    HAS_TWELVELABS = False
+
 def clean_json_response(response_text):
     """
     Limpa a resposta focando em encontrar o objeto JSON que contém a chave "segments".
@@ -279,6 +285,46 @@ def call_g4f(prompt, model_name="gpt-4o-mini"):
     print(f"Falha crítica após {max_retries} tentativas no G4F.")
     return "{}"
 
+def call_twelvelabs(prompt, api_key, video_url, model_name="pegasus1.5"):
+    """
+    Highlight detection com o Pegasus da TwelveLabs.
+
+    Diferente dos outros backends (que analisam apenas a transcrição em texto),
+    o Pegasus analisa o VÍDEO em si (visual + áudio) diretamente pela URL de
+    origem, retornando os segmentos virais no MESMO formato JSON dos demais
+    backends para que process_segments() faça o alinhamento sem alterações.
+    """
+    if not HAS_TWELVELABS:
+        raise ImportError("A biblioteca 'twelvelabs' não está instalada. Instale com: pip install twelvelabs")
+
+    if not api_key:
+        raise ValueError("TwelveLabs API key ausente. Defina em api_config.json (twelvelabs.api_key) ou TWELVELABS_API_KEY.")
+
+    if not video_url:
+        raise ValueError("O backend 'twelvelabs' precisa da URL do vídeo de origem (Pegasus analisa o vídeo, não a transcrição).")
+
+    client = TwelveLabs(api_key=api_key)
+
+    max_retries = 3
+    base_wait = 10
+
+    for attempt in range(max_retries):
+        try:
+            response = client.analyze(
+                model_name=model_name,
+                video={"type": "url", "url": video_url},
+                prompt=prompt,
+                max_tokens=2048,
+            )
+            return response.data or "{}"
+        except Exception as e:
+            print(f"[WARN] Erro na API da TwelveLabs (Tentativa {attempt+1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(base_wait * (2 ** attempt))
+
+    print(f"Falha crítica após {max_retries} tentativas na TwelveLabs.")
+    return "{}"
+
 def load_transcript(project_folder):
     """Parses input.tsv or input.srt from the project folder."""
     input_tsv = os.path.join(project_folder, 'input.tsv')
@@ -498,7 +544,7 @@ def process_segments(raw_segments, transcript_segments, min_duration, max_durati
     return final_result
 
 
-def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode="manual", api_key=None, project_folder="tmp", chunk_size_arg=None, model_name_arg=None):
+def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode="manual", api_key=None, project_folder="tmp", chunk_size_arg=None, model_name_arg=None, video_url=None):
     quantidade_de_virals = num_segments
 
     # 1. Load Transcript
@@ -523,6 +569,10 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
         "g4f": {
             "model": "gpt-4o-mini",
             "chunk_size": 2000
+        },
+        "twelvelabs": {
+            "api_key": "",
+            "model": "pegasus1.5"
         }
     }
 
@@ -532,6 +582,7 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
                 loaded_config = json.load(f)
                 if "gemini" in loaded_config: config["gemini"].update(loaded_config["gemini"])
                 if "g4f" in loaded_config: config["g4f"].update(loaded_config["g4f"])
+                if "twelvelabs" in loaded_config: config["twelvelabs"].update(loaded_config["twelvelabs"])
                 if "selected_api" in loaded_config: config["selected_api"] = loaded_config["selected_api"]
         except Exception as e:
             print(f"Erro ao ler api_config.json: {e}")
@@ -556,6 +607,11 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
     elif ai_mode == "local":
         current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else 3000
         model_name = model_name_arg if model_name_arg else ""
+
+    elif ai_mode == "twelvelabs":
+        cfg_model = config["twelvelabs"].get("model", "pegasus1.5")
+        model_name = model_name_arg if model_name_arg else cfg_model
+        if not api_key: api_key = config["twelvelabs"].get("api_key", "") or os.environ.get("TWELVELABS_API_KEY", "")
 
     system_prompt_template = ""
     if os.path.exists(prompt_path):
@@ -667,6 +723,33 @@ OUTPUT JSON ONLY:
         print(f"[WARN] Could not save prompt_full.txt: {e}")
 
     all_raw_segments = []
+
+    # --- TwelveLabs Pegasus: analisa o VÍDEO inteiro de uma vez (sem chunking) ---
+    # O Pegasus assiste o vídeo (visual + áudio), então enviamos o prompt do vídeo
+    # completo (mesmo conteúdo de prompt_full.txt) em uma única chamada e deixamos
+    # process_segments() alinhar o resultado à transcrição como nos demais backends.
+    if ai_mode == "twelvelabs":
+        print(f"Enviando vídeo completo para o Pegasus da TwelveLabs (Model: {model_name})...")
+        response_text = call_twelvelabs(full_prompt, api_key, video_url, model_name=model_name)
+        try:
+            raw_response_path = os.path.join(project_folder, "response_raw_twelvelabs.txt")
+            with open(raw_response_path, "w", encoding="utf-8") as f:
+                f.write(response_text)
+            print(f"[DEBUG] Raw response saved to: {raw_response_path}")
+        except Exception as e:
+            print(f"[WARN] Failed to save raw response: {e}")
+
+        data = clean_json_response(response_text)
+        all_raw_segments = data.get("segments", [])
+        print(f"Pegasus encontrou {len(all_raw_segments)} segmentos.")
+
+        return process_segments(
+            all_raw_segments,
+            transcript_segments,
+            tempo_minimo,
+            tempo_maximo,
+            output_count=quantidade_de_virals
+        )
 
     print(f"Processando {len(output_texts)} chunks usando modo: {ai_mode.upper()}")
 

@@ -86,6 +86,7 @@ To run ViralCutter on a fresh computer, you need to install the following core t
 2.  **Configure AI (Optional)**
     -   **Gemini (Recommended/Free)**: Add your key in `api_config.json`.
     -   **Local (GGUF)**: Download your favorite `.gguf` models and place them in the `models/` folder. ViralCutter will detect them automatically.
+    -   **TwelveLabs Pegasus (Video-native)**: Pegasus analyzes the **actual video** (visuals + audio), not just the transcript, to detect the most viral moments. Add your key under `twelvelabs.api_key` in `api_config.json` (or set the `TWELVELABS_API_KEY` env var) and select backend `5` / `--ai-backend twelvelabs`. Requires the source video URL. Grab a free API key at [twelvelabs.io](https://twelvelabs.io) (generous free tier).
 
 3.  **Run**
     -   Double-click `run_webui.bat` to open the interface in your browser.

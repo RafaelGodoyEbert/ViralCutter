@@ -8,5 +8,9 @@
     "g4f": {
         "model": "gpt-4o-mini",
         "chunk_size": 2000
+    },
+    "twelvelabs": {
+        "api_key": "",
+        "model": "pegasus1.5"
     }
 }
