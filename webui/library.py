@@ -143,7 +143,7 @@ def generate_project_gallery(project_path_name, is_full_path=False):
                              else:
                                  final_path = abs_video_path.replace("\\", "/")
                              path_encoded = urllib.parse.quote(final_path, safe="/:")
-                             video_src = f"/file={path_encoded}"
+                             video_src = f"/gradio_api/file={path_encoded}"
                          except Exception as e:
                              video_src = ""
                          

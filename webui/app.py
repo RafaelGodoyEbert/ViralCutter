@@ -3,6 +3,7 @@ import subprocess
 import os
 import sys
 import json
+import html
 import psutil
 import shutil
 import datetime
@@ -12,6 +13,7 @@ import urllib.parse
 import urllib.request
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
 import uvicorn
 
 
@@ -46,6 +48,7 @@ EXPERIMENTAL_PRESETS = {
 
 VIRALS_DIR = os.path.join(WORKING_DIR, "VIRALS")
 MODELS_DIR = os.path.join(WORKING_DIR, "models")
+ADVANCED_EDITOR_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "advanced_editor")
 
 # Ensure directories exist
 if not os.path.exists(VIRALS_DIR):
@@ -156,6 +159,29 @@ def get_g4f_models():
 def get_local_models():
     if not os.path.exists(MODELS_DIR): return []
     return [f for f in os.listdir(MODELS_DIR) if f.endswith(".gguf")]
+
+def save_advanced_subtitle_config(font, size, color, highlight, outline, outline_thick, shadow, shadow_size, bold, italic, upper, h_size, words, gap, mode, under, strike, border, vertical, alignment, remove_punc):
+    config = {"font": font, "base_size": int(size), "base_color": convert_color_to_ass(color), "highlight_color": convert_color_to_ass(highlight), "outline_color": convert_color_to_ass(outline), "outline_thickness": outline_thick, "shadow_color": convert_color_to_ass(shadow), "shadow_size": shadow_size, "bold": int(bold), "italic": int(italic), "uppercase": int(upper), "highlight_size": int(h_size), "words_per_block": int(words), "gap_limit": gap, "mode": mode, "underline": int(under), "strikeout": int(strike), "border_style": border, "vertical_position": vertical, "alignment": alignment, "remove_punctuation": remove_punc}
+    with open(os.path.join(WORKING_DIR, "temp_subtitle_config.json"), "w", encoding="utf-8") as config_file:
+        json.dump(config, config_file, indent=4)
+
+def toggle_advanced_editor(project_name, file_name, is_advanced):
+    if is_advanced:
+        return gr.update(value="", visible=False), gr.update(visible=True), False, gr.update(value="✏️ Edição avançada")
+    if not project_name or not file_name:
+        return gr.update(value="<p>Selecione um projeto e um arquivo de legenda primeiro.</p>", visible=True), gr.update(), False, gr.update()
+    video_name = file_name.removesuffix("_processed.json") + ".mp4"
+    video_path = os.path.join(VIRALS_DIR, project_name, "final", video_name)
+    query_data = {"project": project_name, "file": file_name}
+    if os.path.isfile(video_path):
+        query_data["video"] = "/virals/{}/final/{}".format(urllib.parse.quote(project_name), urllib.parse.quote(video_name))
+    query = urllib.parse.urlencode(query_data)
+    return gr.update(value=f'<iframe src="/advanced-editor/?{query}" style="width:100%; height:900px; border:0; border-radius:8px;"></iframe>', visible=True), gr.update(visible=False), True, gr.update(value="↩️ Edição simplificada")
+
+def refresh_advanced_editor(project_name, file_name, is_advanced):
+    if not is_advanced:
+        return gr.update()
+    return toggle_advanced_editor(project_name, file_name, False)[0]
 
 
 
@@ -596,6 +622,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                 # Auto-update PREVIEW HTML on any change
                 for inp in manual_inputs:
                     inp.change(subs.generate_preview_html, inputs=manual_inputs, outputs=preview_html)
+                    inp.change(save_advanced_subtitle_config, inputs=manual_inputs, outputs=[])
                 
                 # Render video button
                 preview_vid_btn.click(
@@ -671,7 +698,6 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
             
             with gr.Group():
                 editor_file_dropdown = gr.Dropdown(choices=[], label=i18n("Select Subtitle File"), interactive=True)
-                editor_load_btn = gr.Button(i18n("Load Subtitles"), variant="secondary")
 
             # Hidden state to store full path of currently loaded JSON
             current_json_path = gr.State()
@@ -691,19 +717,25 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                 editor_save_btn = gr.Button(i18n("💾 Save Changes"), variant="primary")
                 editor_render_single_btn = gr.Button(i18n("⚡ Render This Segment (Very-Fast)"), variant="secondary")
                 editor_render_all_btn = gr.Button(i18n("🎬 Render All (Fast)"), variant="stop")
+                advanced_editor_btn = gr.Button("✏️ Edição avançada")
             
             editor_status = gr.Textbox(label=i18n("Status"), interactive=False)
+            advanced_editor_frame = gr.HTML(visible=False)
+            advanced_editor_open = gr.State(False)
 
             # --- Callbacks for Editor ---
             editor_refresh_btn.click(library.refresh_projects, outputs=editor_project_dropdown)
 
             def update_file_list(proj_name):
-                if not proj_name: return gr.update(choices=[])
+                if not proj_name:
+                    return gr.update(choices=[], value=None), [], None, i18n("Please select project and file.")
                 proj_path = os.path.join(VIRALS_DIR, proj_name)
                 files = editor.list_editable_files(proj_path)
-                return gr.update(choices=files, value=files[0] if files else None)
-
-            editor_project_dropdown.change(update_file_list, inputs=editor_project_dropdown, outputs=editor_file_dropdown)
+                if not files:
+                    return gr.update(choices=[], value=None), [], None, i18n("No file loaded.")
+                full_path = os.path.join(proj_path, "subs", files[0])
+                data = editor.load_transcription_for_editor(full_path)
+                return gr.update(choices=files, value=files[0]), data, full_path, i18n("Loaded {} segments.").format(len(data))
 
             def load_subs(proj_name, file_name):
                 if not proj_name or not file_name:
@@ -713,7 +745,11 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                 data = editor.load_transcription_for_editor(full_path)
                 return data, full_path, i18n("Loaded {} segments.").format(len(data))
 
-            editor_load_btn.click(load_subs, inputs=[editor_project_dropdown, editor_file_dropdown], outputs=[subtitle_dataframe, current_json_path, editor_status])
+            editor_project_dropdown.change(update_file_list, inputs=editor_project_dropdown, outputs=[editor_file_dropdown, subtitle_dataframe, current_json_path, editor_status])
+            editor_file_dropdown.change(load_subs, inputs=[editor_project_dropdown, editor_file_dropdown], outputs=[subtitle_dataframe, current_json_path, editor_status])
+            editor_file_dropdown.change(refresh_advanced_editor, inputs=[editor_project_dropdown, editor_file_dropdown, advanced_editor_open], outputs=advanced_editor_frame)
+
+            advanced_editor_btn.click(toggle_advanced_editor, inputs=[editor_project_dropdown, editor_file_dropdown, advanced_editor_open], outputs=[advanced_editor_frame, subtitle_dataframe, advanced_editor_open, advanced_editor_btn])
 
             def save_subs(json_path, df):
                 if not json_path: return i18n("No file loaded.")
@@ -890,10 +926,7 @@ if __name__ == "__main__":
     else:
         # Check environment
         is_windows = (os.name == 'nt')
-        if is_windows:
-            library.set_url_mode("gradio")
-        else:
-            library.set_url_mode("fastapi")
+        library.set_url_mode("gradio" if is_windows else "fastapi")
             
         allowed_dirs = [VIRALS_DIR, WORKING_DIR, os.getcwd(), "."]
         try:
@@ -929,6 +962,109 @@ if __name__ == "__main__":
                         return {"error": f"File generation failed. Expected: {file_path}"}
                 except Exception as e:
                     return {"error": str(e)}
+
+            def subtitle_path(project, filename):
+                if project not in library.get_existing_projects() or filename not in editor.list_editable_files(os.path.join(VIRALS_DIR, project)):
+                    raise ValueError("Projeto ou arquivo de legenda inválido.")
+                return os.path.join(VIRALS_DIR, project, "subs", filename)
+
+            @fastapi_app.get("/advanced-editor/api/subtitles")
+            def get_advanced_subtitles(project: str, file: str):
+                try:
+                    with open(subtitle_path(project, file), encoding="utf-8") as subtitle_file:
+                        return json.load(subtitle_file)
+                except ValueError as error:
+                    return {"error": str(error)}
+
+            @fastapi_app.get("/advanced-editor/api/subtitles.vtt")
+            def get_advanced_vtt(project: str, file: str):
+                try:
+                    with open(subtitle_path(project, file), encoding="utf-8") as subtitle_file:
+                        segments = json.load(subtitle_file).get("segments", [])
+
+                    try:
+                        with open(os.path.join(WORKING_DIR, "temp_subtitle_config.json"), encoding="utf-8") as config_file:
+                            config = json.load(config_file)
+                    except (OSError, json.JSONDecodeError):
+                        config = {}
+
+                    def timestamp(seconds):
+                        milliseconds = round(float(seconds) * 1000)
+                        hours, milliseconds = divmod(milliseconds, 3600000)
+                        minutes, milliseconds = divmod(milliseconds, 60000)
+                        return f"{hours:02}:{minutes:02}:{milliseconds // 1000:02}.{milliseconds % 1000:03}"
+
+                    mode = config.get("mode", "highlight")
+                    words_per_block = max(1, int(config.get("words_per_block", 3)))
+                    uppercase = bool(config.get("uppercase"))
+                    remove_punctuation = bool(config.get("remove_punctuation"))
+                    alignment = {1: "start", 2: "center", 3: "end"}.get(config.get("alignment"), "center")
+                    cues = []
+
+                    def clean_word(value):
+                        value = str(value or "")
+                        if remove_punctuation:
+                            value = re.sub(r"[^\w\sÀ-ÿ'-]", "", value, flags=re.UNICODE)
+                        if uppercase:
+                            value = value.upper()
+                        return html.escape(value, quote=False)
+
+                    for segment in segments:
+                        words = segment.get("words") or []
+                        if not words:
+                            text = clean_word(segment.get("text", ""))
+                            if text:
+                                cues.append((segment.get("start", 0), segment.get("end", 0), text))
+                            continue
+
+                        for block_start in range(0, len(words), words_per_block):
+                            block = words[block_start:block_start + words_per_block]
+                            if mode == "no_highlight":
+                                text = " ".join(clean_word(word.get("word")) for word in block).strip()
+                                cues.append((block[0].get("start", segment.get("start", 0)), block[-1].get("end", segment.get("end", 0)), text))
+                                continue
+
+                            for index, active_word in enumerate(block):
+                                start = active_word.get("start", segment.get("start", 0))
+                                end = block[index + 1].get("start", active_word.get("end", segment.get("end", 0))) if index + 1 < len(block) else active_word.get("end", segment.get("end", 0))
+                                if mode == "word_by_word":
+                                    text = clean_word(active_word.get("word"))
+                                else:
+                                    text = " ".join(
+                                        f"<c.highlight>{clean_word(word.get('word'))}</c>" if word is active_word else clean_word(word.get("word"))
+                                        for word in block
+                                    )
+                                cues.append((start, max(float(end), float(start) + 0.01), text))
+
+                    content = "WEBVTT\n\n" + "\n\n".join(
+                        f"{timestamp(start)} --> {timestamp(end)} align:{alignment}\n{text}"
+                        for start, end, text in cues if text
+                    )
+                    return Response(content=content, media_type="text/vtt", headers={"Cache-Control": "no-store"})
+                except ValueError as error:
+                    return {"error": str(error)}
+
+            @fastapi_app.get("/advanced-editor/api/subtitle-config")
+            def get_advanced_subtitle_config():
+                try:
+                    with open(os.path.join(WORKING_DIR, "temp_subtitle_config.json"), encoding="utf-8") as config_file:
+                        return json.load(config_file)
+                except (OSError, json.JSONDecodeError):
+                    return {}
+
+            @fastapi_app.put("/advanced-editor/api/subtitles")
+            def save_advanced_subtitles(project: str, file: str, payload: dict):
+                try:
+                    if not isinstance(payload.get("segments"), list):
+                        raise ValueError("Formato de legenda inválido.")
+                    with open(subtitle_path(project, file), "w", encoding="utf-8") as subtitle_file:
+                        json.dump(payload, subtitle_file, ensure_ascii=False, indent=4)
+                    return {"ok": True}
+                except ValueError as error:
+                    return {"error": str(error)}
+
+            if os.path.isdir(ADVANCED_EDITOR_DIR):
+                fastapi_app.mount("/advanced-editor", StaticFiles(directory=ADVANCED_EDITOR_DIR, html=True), name="advanced-editor")
             
             print(f"Mounted /virals to {VIRALS_DIR}")
 
