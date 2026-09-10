@@ -12,7 +12,6 @@ if __name__ == "__main__":
     parser.add_argument("--project", required=True)
     parser.add_argument("--segment", type=int, required=True)
     parser.add_argument("--format", default="premiere")
-    parser.add_argument("--subtitle-config", default=None, help="Path to subtitle config JSON")
     args = parser.parse_args()
 
-    export_pack(args.project, args.segment, args.format, subtitle_config_path=args.subtitle_config)
+    export_pack(args.project, args.segment, args.format)

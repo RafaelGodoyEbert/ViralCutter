@@ -8,9 +8,12 @@ echo.
 echo ==========================================
 echo Criando ambiente virtual (.venv)...
 echo ==========================================
-:: Tenta usar o uv do PATH. Se falhar, pode ser necessario reiniciar o terminal.
-uv venv
-
+:: Tenta usar o uv do PATH. Deleta o ambiente antigo se existir para não dar conflito.
+if exist .venv (
+    echo Removendo ambiente virtual antigo ...
+    rmdir /s /q .venv
+)
+uv venv --python 3.12
 echo.
 echo ==========================================
 echo CONFIGURACAO DE PLACA DE VIDEO
@@ -39,7 +42,8 @@ echo (IAs em Nuvem / Sem Modelos Locais)
 echo ==========================================
 :: Ativa o venv temporariamente para o install (uv gerencia isso automaticamente se detectar o venv, mas vamos garantir)
 :: Se o uv venv criou a pasta .venv, o uv pip install vai usar ela por padrao se estiver na raiz.
-uv pip install -r requirements.txt
+:: --extra-index-url adicionado aqui para garantir que se alguma lib pedir torch novo, ele baixe o de CUDA ao invez do CPU.
+uv pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu124
 
 echo.
 echo ==========================================

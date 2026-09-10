@@ -7,7 +7,9 @@ import psutil
 import shutil
 import datetime
 import time
+import tempfile
 import urllib.parse
+import urllib.request
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -128,32 +130,28 @@ def kill_process():
             return i18n("Error terminating process: {}").format(e)
     return i18n("No process running.")
 
-GEMINI_MODELS = [
-    'gemini-3-pro-preview',
-    'gemini-2.5-flash',
-    'gemini-2.5-flash-preview-09-2025',
-    'gemini-2.5-flash-lite',
-    'gemini-2.5-flash-lite-preview-09-2025',
-    'gemini-2.5-pro',
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite'
-]
+GEMINI_DEFAULT_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest']
 
-G4F_MODELS = [
-    'gpt-4o',
-    'gpt-4o-mini',
-    'gpt-4',
-    'o1-mini',
-    'o1',
-    'deepseek-r1',
-    'deepseek-v3',
-    'llama-3.3-70b',
-    'llama-3.1-405b',
-    'claude-3.5-sonnet',
-    'claude-3.7-sonnet',
-    'gemini-2.0-flash',
-    'qwen-2.5-72b'
-]
+def get_gemini_models(api_key):
+    if not api_key:
+        return GEMINI_DEFAULT_MODELS
+    try:
+        url = "https://generativelanguage.googleapis.com/v1beta/models?" + urllib.parse.urlencode({"key": api_key})
+        with urllib.request.urlopen(url, timeout=15) as response:
+            models = json.load(response).get("models", [])
+        return sorted(model["name"].removeprefix("models/") for model in models
+                      if "generateContent" in model.get("supportedGenerationMethods", [])) or GEMINI_DEFAULT_MODELS
+    except Exception as error:
+        print(f"Could not load Gemini models: {error}")
+        return GEMINI_DEFAULT_MODELS
+
+def get_g4f_models():
+    try:
+        from g4f import models
+        return sorted(set(models._all_models))
+    except Exception as error:
+        print(f"Could not load G4F models: {error}")
+        return []
 
 def get_local_models():
     if not os.path.exists(MODELS_DIR): return []
@@ -178,12 +176,13 @@ def apply_experimental_preset(preset_name):
 # Subtitle logic moved to subtitle_handler.py
 
 
-def run_viral_cutter(input_source, project_name, url, video_file, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, no_face_mode, 
+def run_viral_cutter(input_source, project_name, url, cookies_txt, video_file, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, no_face_mode, 
                      face_filter_thresh, face_two_thresh, face_conf_thresh, face_dead_zone, focus_active_speaker, active_speaker_mar, active_speaker_score_diff, include_motion, active_speaker_motion_threshold, active_speaker_motion_sensitivity, active_speaker_decay,
                      use_custom_subs, font_name, font_size, font_color, highlight_color, outline_color, outline_thickness, shadow_color, shadow_size, is_bold, is_italic, is_uppercase, vertical_pos, alignment,
                      h_size, w_block, gap, mode, under, strike, border_s, remove_punc, video_quality, use_youtube_subs, translate_target):
     
     global current_process
+    cookies_file = None
     yield "", gr.update(value=i18n("Running..."), interactive=False), gr.update(visible=True), None 
 
     cmd = [sys.executable, MAIN_SCRIPT_PATH]
@@ -223,6 +222,11 @@ def run_viral_cutter(input_source, project_name, url, video_file, segments, vira
         
     else:
         if url: cmd.extend(["--url", url])
+        if cookies_txt and cookies_txt.strip():
+            cookies_file = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".txt", prefix="viralcutter_cookies_", dir=WORKING_DIR, delete=False)
+            cookies_file.write(cookies_txt)
+            cookies_file.close()
+            cmd.extend(["--cookies-file", cookies_file.name])
         # Pass Video Quality
         if video_quality: cmd.extend(["--video-quality", video_quality])
         # Pass Subtitle Option (if False, we skip)
@@ -348,6 +352,11 @@ def run_viral_cutter(input_source, project_name, url, video_file, segments, vira
                     current_process.wait()
                 except Exception: pass
             current_process = None
+        if cookies_file:
+            try:
+                os.remove(cookies_file.name)
+            except OSError:
+                pass
     
     # Wait to ensure filesystem flush
     time.sleep(1.0)
@@ -361,16 +370,16 @@ def run_viral_cutter(input_source, project_name, url, video_file, segments, vira
 
 css = """
 /* Global Dark Theme Overrides */
-body, .gradio-container {
-    background-color: #0b0b0b !important;
+html, body, #root, .gradio-container {
+    background-color: #182438 !important;
     color: #ffffff !important;
 }
 
 /* Force dark background for specific inputs that might be white */
 input[type="password"], textarea, select {
-    background-color: #1f1f1f !important;
+    background-color: #1b293d !important;
     color: #ffffff !important;
-    border: 1px solid #333 !important;
+    border: 1px solid #46648f !important;
 }
 
 /* Hide Footer */
@@ -378,9 +387,9 @@ footer {visibility: hidden}
 
 /* Container Width */
 .gradio-container {
-    max-width: 98% !important; 
-    width: 98% !important;
-    margin: 0 auto !important;
+    max-width: none !important;
+    width: auto !important;
+    margin: 0 !important;
 }
 """
 
@@ -396,6 +405,11 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     input_source = gr.Radio([(i18n("YouTube URL"), "YouTube URL"), (i18n("Existing Project"), "Existing Project"), (i18n("Upload Video"), "Upload Video")], label=i18n("Input Source"), value="YouTube URL")
                     
                     url_input = gr.Textbox(label=i18n("YouTube URL"), placeholder="https://www.youtube.com/watch?v=...", visible=True)
+                    cookies_txt_input = gr.Textbox(label="Cookies.txt (opcional)", type="password", lines=4, placeholder="# Netscape HTTP Cookie File", visible=True)
+                    cookies_help = gr.HTML(
+                        """<small>Se o download pedir login, exporte o arquivo no formato Netscape: <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" rel="noopener noreferrer">Chrome/Chromium</a> ou <a href="https://addons.mozilla.org/en-US/firefox/addon/get-cookies-txt-locally/" target="_blank" rel="noopener noreferrer">Firefox</a>. Cole o conteúdo acima; ele é apagado ao fim do processamento.</small>""",
+                        visible=True,
+                    )
                     video_upload = gr.File(label=i18n("Upload Video"), file_count="single", file_types=["video"], visible=False)
                     
                     with gr.Row():
@@ -407,13 +421,13 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     
                     def on_source_change(source):
                         if source == "YouTube URL":
-                            return gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(value="Full") 
+                            return gr.update(visible=True), gr.update(visible=True), gr.update(visible=True), gr.update(visible=False), gr.update(visible=False), gr.update(value="Full") 
                         elif source == "Upload Video":
-                             return gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), gr.update(value="Full")
+                             return gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(visible=True), gr.update(value="Full")
                         else:
                             # Load projects
                             projs = library.get_existing_projects()
-                            return gr.update(visible=False), gr.update(choices=projs, visible=True), gr.update(visible=False), gr.update(value="Subtitles Only")
+                            return gr.update(visible=False), gr.update(visible=False), gr.update(visible=False), gr.update(choices=projs, visible=True), gr.update(visible=False), gr.update(value="Subtitles Only")
                     
                     
                     with gr.Row():
@@ -431,14 +445,14 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     
                     # New Dynamic Inputs
                     with gr.Row():
-                        ai_model_input = gr.Dropdown(choices=GEMINI_MODELS, label=i18n("AI Model"), value=GEMINI_MODELS[1], allow_custom_value=True, visible=True, scale=5)
-                        refresh_models_btn = gr.Button("🔄", size="sm", visible=False, scale=0, min_width=50) # Only local
+                        ai_model_input = gr.Dropdown(choices=GEMINI_DEFAULT_MODELS, label=i18n("AI Model"), value=GEMINI_DEFAULT_MODELS[0], allow_custom_value=True, visible=True, scale=5)
+                        refresh_models_btn = gr.Button("🔄", size="sm", visible=True, scale=0, min_width=50)
                         chunk_size_input = gr.Number(label=i18n("Chunk Size"), value=70000, precision=0, scale=2)
                     
                     # Update listeners with logic to hide/show API key
                     def update_ai_ui(backend):
                         show_api = (backend == "gemini")
-                        show_refresh = (backend == "local")
+                        show_refresh = (backend != "manual")
                         
                         # Definições padrão para evitar que fiquem vazios
                         new_choices = []
@@ -446,12 +460,12 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         new_chunk = 70000
                         
                         if backend == "gemini":
-                            new_choices = GEMINI_MODELS
-                            new_val = GEMINI_MODELS[1]
+                            new_choices = GEMINI_DEFAULT_MODELS
+                            new_val = GEMINI_DEFAULT_MODELS[0]
                             new_chunk = 70000
                         elif backend == "g4f":
-                            new_choices = G4F_MODELS
-                            new_val = G4F_MODELS[5]
+                            new_choices = []
+                            new_val = None
                             new_chunk = 70000
                         elif backend == "local":
                             models = get_local_models()
@@ -468,12 +482,17 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                             gr.update(value=new_chunk) # Chunk Size
                         )
 
-                    def refresh_local_models():
-                        models = get_local_models()
-                        val = models[0] if models else i18n("No models found")
+                    def refresh_models(backend, api_key):
+                        if backend == "gemini":
+                            models = get_gemini_models(api_key)
+                        elif backend == "g4f":
+                            models = get_g4f_models()
+                        else:
+                            models = get_local_models()
+                        val = models[0] if models else None
                         return gr.update(choices=models, value=val)
 
-                    refresh_models_btn.click(refresh_local_models, outputs=ai_model_input)
+                    refresh_models_btn.click(refresh_models, inputs=[ai_backend_input, api_key_input], outputs=ai_model_input)
                     ai_backend_input.change(update_ai_ui, inputs=ai_backend_input, outputs=[api_key_input, ai_model_input, refresh_models_btn, chunk_size_input])
 
                     model_input = gr.Dropdown(["tiny", "small", "medium", "large", "large-v1", "large-v2", "large-v3", "turbo", "large-v3-turbo", "distil-large-v2", "distil-medium.en", "distil-small.en", "distil-large-v3"], label=i18n("Whisper Model"), value="large-v3-turbo")
@@ -487,7 +506,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                     
                     
                     # Update listeners now that all components are defined
-                    input_source.change(on_source_change, inputs=input_source, outputs=[url_input, project_selector, video_upload, workflow_input])
+                    input_source.change(on_source_change, inputs=input_source, outputs=[url_input, cookies_txt_input, cookies_help, project_selector, video_upload, workflow_input])
              
              with gr.Accordion(i18n("Advanced Face Settings"), open=False):
                  face_preset_input = gr.Dropdown(choices=[(i18n(k), k) for k in FACE_PRESETS.keys()], label=i18n("Configuration Presets"), value="Default (Balanced)", interactive=True)
@@ -626,7 +645,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
              
              # MUST pass all all new inputs to the run function
              start_btn.click(run_viral_cutter, inputs=[
-                 input_source, project_selector, url_input, video_upload, segments_input, viral_input, themes_input, min_dur_input, max_dur_input, 
+                 input_source, project_selector, url_input, cookies_txt_input, video_upload, segments_input, viral_input, themes_input, min_dur_input, max_dur_input, 
                  model_input, ai_backend_input, api_key_input, ai_model_input, chunk_size_input, 
                  workflow_input, face_model_input, face_mode_input, face_detect_interval_input, no_face_mode_input, 
                  face_filter_thresh_input, face_two_thresh_input, face_conf_thresh_input, face_dead_zone_input, focus_active_speaker_input, 
@@ -871,8 +890,11 @@ if __name__ == "__main__":
     else:
         # Check environment
         is_windows = (os.name == 'nt')
-        
-        library.set_url_mode("fastapi")
+        if is_windows:
+            library.set_url_mode("gradio")
+        else:
+            library.set_url_mode("fastapi")
+            
         allowed_dirs = [VIRALS_DIR, WORKING_DIR, os.getcwd(), "."]
         try:
             gr.set_static_paths(paths=allowed_dirs)
@@ -891,6 +913,12 @@ if __name__ == "__main__":
                     project_path = os.path.join(VIRALS_DIR, project)
                     script_path = os.path.join(WORKING_DIR, "scripts", "export_xml.py")
                     cmd = [sys.executable, script_path, "--project", project_path, "--segment", str(segment), "--format", format]
+                    
+                    # Pass subtitle config if available
+                    subtitle_config_path = os.path.join(WORKING_DIR, "temp_subtitle_config.json")
+                    if os.path.exists(subtitle_config_path):
+                        cmd.extend(["--subtitle-config", subtitle_config_path])
+                    
                     subprocess.run(cmd, check=True)
                     proj_name = os.path.basename(project_path)
                     zip_filename = f"export_{proj_name}_seg{segment}.zip"
@@ -910,9 +938,6 @@ if __name__ == "__main__":
             app, local_url, share_url = demo.queue().launch(
                 share=False, 
                 allowed_paths=allowed_dirs, 
-                inbrowser=True,
-                server_name="0.0.0.0",
-                server_port=7860,
                 prevent_thread_lock=True
             )
             attach_extra_routes(app)

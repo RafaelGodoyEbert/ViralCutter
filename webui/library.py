@@ -123,40 +123,30 @@ def generate_project_gallery(project_path_name, is_full_path=False):
                 try:
                     abs_video = os.path.abspath(video_path)
                     
+                    # Make Export XML Button (Always available)
+                    proj_name_api = os.path.basename(project_path_name)
+                    def make_export_btn(fmt, label, color_hover, svg_path):
+                        src = f"/export_xml_api?project={proj_name_api}&segment={i}&format={fmt}"
+                        return f'<a href="{src}" target="_blank" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="{label}" onmouseover="this.style.color=\'{color_hover}\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{svg_path}</svg></a>'
+                    export_pr = make_export_btn("premiere", "Export Premiere XML (Split Screen – known bug)", "#d064ff", '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15h6"></path><path d="M12 12v6"></path>')
+                    export_link = f"{export_pr}"
+
                     if URL_MODE == "gradio":
                          # Gradio Launch Mode
                          # Strategy: SMART PATH (Relative preferred, Absolute fallback)
-                         
                          try:
                              cwd = os.getcwd()
                              abs_video_path = os.path.abspath(video_path)
-                             
-                             # Try relative path first
                              rel_path = os.path.relpath(abs_video_path, cwd)
-                             
                              if not rel_path.startswith(".."):
-                                 # Inside CWD, use relative
                                  final_path = rel_path.replace("\\", "/")
-                                 # Debug
-                                 print(f"DEBUG: URL Generation (Relative): {final_path}")
                              else:
-                                 # Outside CWD, use absolute
                                  final_path = abs_video_path.replace("\\", "/")
-                                 print(f"DEBUG: URL Generation (Absolute fallback): {final_path}")
-
-                             # Encode
                              path_encoded = urllib.parse.quote(final_path, safe="/:")
-                             video_src = f"/file/{path_encoded}"
-                             
+                             video_src = f"/file={path_encoded}"
                          except Exception as e:
-                             print(f"DEBUG: Error pathing: {e}")
                              video_src = ""
                          
-                         if os.path.exists(abs_video):
-                             print(f"DEBUG:   File Exists.")
-                         else:
-                             print(f"DEBUG:   File NOT FOUND.")
-                             
                          video_tag = f"""
                         <video controls preload="metadata" playsinline style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;">
                             <source src="{video_src}" type="video/mp4">
@@ -167,17 +157,11 @@ def generate_project_gallery(project_path_name, is_full_path=False):
 
                     else:
                         # Use Relative Path through /virals mount
-                        # Calculate relative path from VIRALS_DIR
-                        # video_path needs to be under VIRALS_DIR for this to work
                         abs_virals = os.path.abspath(VIRALS_DIR)
-                        
                         if abs_video.startswith(abs_virals):
                             rel_path = os.path.relpath(abs_video, abs_virals)
-                            # Replace backslashes for URL
                             url_path = rel_path.replace("\\", "/")
                             url_path = urllib.parse.quote(url_path)
-                            
-                            # Add timestamp to force cache refresh
                             import time
                             timestamp = int(time.time())
                             video_src = f"/virals/{url_path}?t={timestamp}"
@@ -188,29 +172,7 @@ def generate_project_gallery(project_path_name, is_full_path=False):
                                 Your browser does not support the video tag.
                             </video>
                             """
-                            
-                            
                             download_link = f'<a href="{video_src}" download="{os.path.basename(video_path)}" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="Download" onmouseover="this.style.color=\'#fff\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>'
-                            
-                            # Export XML Link
-                            # project_path_name might be full path or folder name
-                            proj_name_api = os.path.basename(project_path_name)
-                            
-                            def make_export_btn(fmt, label, color_hover, svg_path):
-                                src = f"/export_xml_api?project={proj_name_api}&segment={i}&format={fmt}"
-                                return f'<a href="{src}" target="_blank" style="color: #aaa; display: flex; align-items: center; justify-content: center; padding: 5px; border-radius: 50%; transition: color 0.2s;" title="{label}" onmouseover="this.style.color=\'{color_hover}\'" onmouseout="this.style.color=\'#aaa\'"><svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{svg_path}</svg></a>'
-
-                            # Premiere (Pr)
-                            export_pr = make_export_btn("premiere", "Export Premiere XML (Split Screen – known bug)", "#d064ff", '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15h6"></path><path d="M12 12v6"></path>')
-                            
-                            # Resolve (Dv)
-                            # export_dv = make_export_btn("resolve", "Export DaVinci Resolve XML", "#ff6464", '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><circle cx="12" cy="14" r="3"></circle>')
-                            
-                            # Final Cut (Fc)
-                            # export_fc = make_export_btn("final-cut-pro", "Export FCP XML", "#64d0ff", '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M10 12l4 2l-4 2z"></path>')
-
-                            export_link = f"{export_pr}" #{export_dv}{export_fc}"
-
                         else:
                             video_tag = f'<div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #222; color: #666;"><span>⚠️</span><br>{i18n("External Video")}</div>'
                 except Exception as e:

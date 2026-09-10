@@ -24,11 +24,11 @@ def detect_faces_jit(video_path):
     # Initialize InsightFace
     try:
         app = FaceAnalysis(name='buffalo_l', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
-        app.prepare(ctx_id=0, det_size=(960, 960), det_thresh=0.25)
+        app.prepare(ctx_id=0, det_size=(640, 640))
     except Exception as e:
         print(f"InsightFace Init Error: {e}. Trying CPU only.")
         app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
-        app.prepare(ctx_id=0, det_size=(640, 640), det_thresh=0.25)
+        app.prepare(ctx_id=0, det_size=(640, 640))
         
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
