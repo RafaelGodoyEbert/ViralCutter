@@ -5,6 +5,36 @@ import sys
 from i18n.i18n import I18nAuto
 i18n = I18nAuto()
 
+BROWSERS = ('chrome', 'edge', 'firefox', 'brave', 'opera', 'vivaldi', 'chromium', 'whale')
+
+def download_with_browser_cookies(url, ydl_opts):
+    """Try every supported local browser profile before falling back to no cookies."""
+    if ydl_opts.get('cookiefile'):
+        try:
+            print("Tentando cookies.txt fornecido.")
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            return
+        except Exception as error:
+            print(f"Cookies.txt recusado: {error}")
+    for browser in BROWSERS:
+        try:
+            print(f"Tentando cookies do navegador: {browser}")
+            options = {key: value for key, value in ydl_opts.items() if key != 'cookiefile'}
+            options['cookiesfrombrowser'] = (browser,)
+            with yt_dlp.YoutubeDL(options) as ydl:
+                ydl.download([url])
+            return
+        except Exception as error:
+            print(f"Cookies do {browser} indisponíveis ou recusados: {error}")
+    try:
+        print("Tentando download sem cookies do navegador.")
+        options = {key: value for key, value in ydl_opts.items() if key != 'cookiefile'}
+        with yt_dlp.YoutubeDL(options) as ydl:
+            ydl.download([url])
+    except Exception:
+        raise
+
 def sanitize_filename(name):
     """Remove caracteres inválidos e emojis para evitar erro de encoding no Windows."""
     # Remove caracteres reservados do sistema de arquivos
@@ -31,7 +61,7 @@ def progress_hook(d):
     elif d['status'] == 'finished':
         print(f"[download] Download concluído: {d['filename']}", flush=True)
 
-def download(url, base_root="VIRALS", download_subs=True, quality="best"):
+def download(url, base_root="VIRALS", download_subs=True, quality="best", cookies_file=None):
     # 1. Extrair informações do vídeo para pegar o título
     # 1. Extrair informações do vídeo para pegar o título
     print(i18n("Extracting video information..."))
@@ -42,16 +72,19 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
     # Since replace_file_content works on line ranges, I should be careful.
     # Let's assume I'm replacing the whole function body or significant parts.
     
-    # Tentativa 1: Com cookies
-    try:
-        with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'cookiesfrombrowser': ('chrome',)}) as ydl:
-            info = ydl.extract_info(url, download=False)
-            title = info.get('title')
-    except Exception as e:
+    # Try every browser profile available on the local machine.
+    for browser in BROWSERS:
         try:
-            print(i18n("Warning: Failed to extract info with cookies: {}").format(e))
-        except UnicodeEncodeError:
-            print(i18n("Warning: Failed to extract info with cookies: [Encoding Error in Message]"))
+            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True, 'cookiesfrombrowser': (browser,)}) as ydl:
+                info = ydl.extract_info(url, download=False)
+                title = info.get('title')
+            if title:
+                break
+        except Exception as e:
+            try:
+                print(i18n("Warning: Failed to extract info with cookies: {}").format(e))
+            except UnicodeEncodeError:
+                print(i18n("Warning: Failed to extract info with cookies: [Encoding Error in Message]"))
 
     # Tentativa 2: Sem cookies
     if not title:
@@ -142,6 +175,8 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
         'no_warnings': False,
         'force_ipv4': True,
     }
+    if cookies_file:
+        ydl_opts['cookiefile'] = cookies_file
     
 
     
@@ -158,8 +193,7 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
     
     # Tentativa 1: Com configuração original
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+        download_with_browser_cookies(url, ydl_opts)
     except yt_dlp.utils.DownloadError as e:
         error_str = str(e)
         if "No address associated with hostname" in error_str or "Failed to resolve" in error_str:
@@ -177,8 +211,7 @@ def download(url, base_root="VIRALS", download_subs=True, quality="best"):
             ydl_opts['postprocessors'] = [p for p in ydl_opts.get('postprocessors', []) if 'Subtitle' not in p.get('key', '')]
             
             try:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([url])
+                download_with_browser_cookies(url, ydl_opts)
             except Exception as e2:
                 print(i18n("Fatal error on second attempt: {}").format(e2))
                 raise

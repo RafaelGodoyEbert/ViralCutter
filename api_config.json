@@ -2,11 +2,10 @@
     "selected_api": "gemini",
     "gemini": {
         "api_key": "",
-        "model": "gemini-2.5-flash-lite-preview-09-2025",
+        "model": "gemini-flash-lite-latest",
         "chunk_size": 20000
     },
     "g4f": {
-        "model": "gpt-4o-mini",
         "chunk_size": 2000
     }
 }

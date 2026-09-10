@@ -102,6 +102,7 @@ def main():
     # Configuração de Argumentos via Linha de Comando (CLI)
     parser = argparse.ArgumentParser(description="ViralCutter CLI")
     parser.add_argument("--url", help="YouTube Video URL")
+    parser.add_argument("--cookies-file", help="Netscape-format cookies.txt file for the YouTube download")
     parser.add_argument("--segments", type=int, help="Number of segments to create")
     parser.add_argument("--viral", action="store_true", help="Enable viral mode")
     parser.add_argument("--themes", help="Comma-separated themes (if not viral mode)")
@@ -414,7 +415,7 @@ def main():
                 
             print(i18n("Starting download..."))
             download_subs = not args.skip_youtube_subs
-            download_result = download_video.download(url, download_subs=download_subs, quality=args.video_quality)
+            download_result = download_video.download(url, download_subs=download_subs, quality=args.video_quality, cookies_file=args.cookies_file)
             
             if isinstance(download_result, tuple):
                 input_video, project_folder = download_result

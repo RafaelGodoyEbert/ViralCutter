@@ -196,7 +196,7 @@ def preprocess_transcript_for_ai(segments):
 
     return full_text.strip()
 
-def call_gemini(prompt, api_key, model_name='gemini-2.5-flash-lite-preview-09-2025'):
+def call_gemini(prompt, api_key, model_name='gemini-flash-lite-latest'):
     if not HAS_GEMINI:
         raise ImportError("A biblioteca 'google-generativeai' não está instalada. Instale com: pip install google-generativeai")
     
@@ -230,9 +230,11 @@ def call_gemini(prompt, api_key, model_name='gemini-2.5-flash-lite-preview-09-20
     print("Falha após max retries no Gemini.")
     return "{}"
 
-def call_g4f(prompt, model_name="gpt-4o-mini"):
+def call_g4f(prompt, model_name=None):
     if not HAS_G4F:
         raise ImportError("A biblioteca 'g4f' não está instalada. Instale com: pip install g4f")
+    if not model_name:
+        model_name = g4f.models._all_models[0]
     
     max_retries = 3
     base_wait = 5
@@ -517,11 +519,10 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
         "selected_api": "gemini",
         "gemini": {
             "api_key": "",
-            "model": "gemini-2.5-flash-lite-preview-09-2025",
+            "model": "gemini-flash-lite-latest",
             "chunk_size": 15000
         },
         "g4f": {
-            "model": "gpt-4o-mini",
             "chunk_size": 2000
         }
     }
@@ -543,14 +544,14 @@ def create(num_segments, viral_mode, themes, tempo_minimo, tempo_maximo, ai_mode
     if ai_mode == "gemini":
         cfg_chunk = config["gemini"].get("chunk_size", 15000)
         current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else cfg_chunk
-        cfg_model = config["gemini"].get("model", "gemini-2.5-flash-lite-preview-09-2025")
+        cfg_model = config["gemini"].get("model", "gemini-flash-lite-latest")
         model_name = model_name_arg if model_name_arg else cfg_model
         if not api_key: api_key = config["gemini"].get("api_key", "")
             
     elif ai_mode == "g4f":
         cfg_chunk = config["g4f"].get("chunk_size", 2000)
         current_chunk_size = chunk_size_arg if chunk_size_arg and int(chunk_size_arg) > 0 else cfg_chunk
-        cfg_model = config["g4f"].get("model", "gpt-4o-mini")
+        cfg_model = config["g4f"].get("model")
         model_name = model_name_arg if model_name_arg else cfg_model
 
     elif ai_mode == "local":

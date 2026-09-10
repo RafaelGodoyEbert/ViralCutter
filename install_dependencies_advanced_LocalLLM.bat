@@ -8,9 +8,12 @@ echo.
 echo ==========================================
 echo Criando ambiente virtual (.venv)...
 echo ==========================================
-:: Tenta usar o uv do PATH. Se falhar, pode ser necessario reiniciar o terminal.
-uv venv
-
+:: Tenta usar o uv do PATH. Deleta o ambiente antigo se existir para não dar conflito.
+if exist .venv (
+    echo Removendo ambiente virtual antigo ...
+    rmdir /s /q .venv
+)
+uv venv --python 3.12
 echo.
 echo ==========================================
 echo CONFIGURACAO DE PLACA DE VIDEO
@@ -32,7 +35,7 @@ if "%gpu_choice%"=="1" (
     echo Instalando PyTorch e ONNX para AMD/CPU...
     uv pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
     uv pip install onnxruntime==1.20.1
-    echo Instalando LLaMA C++ normal (Requer C++ Build Tools)...
+    echo Instalando LLaMA C++ normal ^(Requer C++ Build Tools^)...
     uv pip install llama-cpp-python
 )
 
@@ -41,7 +44,8 @@ echo ==========================================
 echo Instalando TODAS as dependencias (INCLUINDO MODELOS LOCAIS LLM)
 echo Atenção: Processo mais demorado. Requer C++ Build Tools.
 echo ==========================================
-uv pip install -r requirements.txt
+:: --extra-index-url adicionado aqui para garantir que se alguma lib pedir torch novo, ele baixe o de CUDA ao invez do CPU.
+uv pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu124
 
 echo.
 echo ==========================================
