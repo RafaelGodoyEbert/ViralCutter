@@ -8,6 +8,7 @@ mediapipe
 google-genai
 google-generativeai
 insightface
+uniface
 gradio
 opencv-python
 psutil

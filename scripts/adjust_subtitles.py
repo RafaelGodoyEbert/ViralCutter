@@ -175,7 +175,7 @@ def generate_ass_from_file(input_path, output_path, project_folder,
                     elif mode == "no_highlight" or mode == "sem_higlight": 
                         line = " ".join(word_data['word'] for word_data in block).strip()
 
-                    elif mode == "palavra_por_palavra": 
+                    elif mode in ("palavra_por_palavra", "word_by_word"):
                         line = block[j]['word'].strip()
                     
                     else:

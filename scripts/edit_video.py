@@ -12,6 +12,12 @@ except ImportError:
     INSIGHTFACE_AVAILABLE = False
     print("InsightFace not found or error importing. Install with: pip install insightface onnxruntime-gpu")
 
+try:
+    from uniface.tracking import BYTETracker
+    BYTETRACK_AVAILABLE = True
+except ImportError:
+    BYTETRACK_AVAILABLE = False
+
 
 # Global cache for encoder
 CACHED_ENCODER = None
@@ -93,6 +99,42 @@ def sort_by_proximity(new_faces, old_faces, center_func):
         return [new_faces[1], new_faces[0]]
     
     return new_faces
+
+def bbox_iou(first_bbox, second_bbox):
+    """Intersection over union for two [x1, y1, x2, y2] boxes."""
+    x1 = max(first_bbox[0], second_bbox[0])
+    y1 = max(first_bbox[1], second_bbox[1])
+    x2 = min(first_bbox[2], second_bbox[2])
+    y2 = min(first_bbox[3], second_bbox[3])
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
+    first_area = max(0, first_bbox[2] - first_bbox[0]) * max(0, first_bbox[3] - first_bbox[1])
+    second_area = max(0, second_bbox[2] - second_bbox[0]) * max(0, second_bbox[3] - second_bbox[1])
+    union = first_area + second_area - intersection
+    return intersection / union if union else 0.0
+
+def add_track_ids(faces, tracks):
+    """Attach each BYTETrack ID to its best-overlapping face detection."""
+    for face in faces:
+        face['track_id'] = None
+        best_track = None
+        best_iou = 0.0
+        for track in tracks:
+            iou = bbox_iou(face['bbox'], track[:4])
+            if iou > best_iou:
+                best_iou = iou
+                best_track = track
+        if best_track is not None and best_iou > 0:
+            face['track_id'] = int(best_track[4])
+    return faces
+
+def select_tracked_faces(faces, target_faces, previous_track_ids):
+    """Keep crop slots attached to temporary tracker IDs, then fill by size."""
+    ranked = sorted(faces, key=lambda face: face['effective_area'], reverse=True)
+    by_id = {face['track_id']: face for face in ranked if face.get('track_id') is not None}
+    selected = [by_id[track_id] for track_id in previous_track_ids if track_id in by_id]
+    selected_ids = {face['track_id'] for face in selected}
+    selected.extend(face for face in ranked if face.get('track_id') not in selected_ids)
+    return selected[:target_faces]
 
 def generate_short_fallback(input_file, output_file, index, project_folder, final_folder, no_face_mode="padding"):
     """Fallback function: Center Crop (Zoom) or Padding if detection fails."""
@@ -474,9 +516,9 @@ def generate_short_haar(input_file, output_file, index, project_folder, final_fo
 
     finalize_video(input_file, output_file, index, fps, project_folder, final_folder)
 
-def generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, no_face_mode="padding"):
+def generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode="auto", face_tracking="heuristic", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=40, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, no_face_mode="padding"):
     """Face detection using InsightFace (SOTA)."""
-    print(f"Processing (InsightFace): {input_file} | Mode: {face_mode}")
+    print(f"Processing (InsightFace): {input_file} | Mode: {face_mode} | Tracking: {face_tracking}")
     
     cap = cv2.VideoCapture(input_file)
     if not cap.isOpened():
@@ -496,9 +538,16 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     next_detection_frame = 0
     
     last_detected_faces = None
+    last_detected_track_ids = []
     last_frame_face_positions = None
     last_success_frame = -1000
     max_frames_without_detection = int(3.0 * fps) # 3 seconds timeout
+
+    tracker = None
+    if face_tracking == "bytetrack":
+        if not BYTETRACK_AVAILABLE:
+            raise ImportError("BYTETrack mode requires UniFace. Install dependencies and try again.")
+        tracker = BYTETracker(track_thresh=confidence_threshold, track_buffer=int(2 * fps), match_thresh=0.8)
 
     transition_duration = 4 # Smooth transition over 4 frames (almost continuous)
     transition_frames = []
@@ -538,7 +587,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
         if not ret or frame is None:
             break
 
-        if frame_index >= next_detection_frame and len(transition_frames) == 0:
+        if face_tracking == "bytetrack" or (frame_index >= next_detection_frame and len(transition_frames) == 0):
             # Detect faces
             faces = detect_faces_insightface(frame)
             if faces:
@@ -706,6 +755,11 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                 faces_activity_state = []
 
             faces = valid_faces
+            if tracker is not None:
+                tracker_detections = np.array(
+                    [[*face['bbox'], face['det_score']] for face in faces], dtype=np.float32
+                ) if faces else np.empty((0, 5), dtype=np.float32)
+                faces = add_track_ids(faces, tracker.update(tracker_detections))
             
             # Decide 1 or 2 faces
             target_faces = 1
@@ -780,7 +834,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
             
             # Fallback Lookahead: If detection fails or partial
             # But DO NOT look ahead if we are in Crowd Mode (we explicitly wanted 0 faces)
-            if len(faces) < target_faces and not is_crowd:
+            if len(faces) < target_faces and not is_crowd and face_tracking != "bytetrack":
                 # Try 1 frame ahead
                 ret2, frame2 = cap.read()
                 if ret2 and frame2 is not None:
@@ -819,7 +873,9 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                 # Instead of just Area, we prioritize faces closer to the LAST detected face
                 # This prevents switching to a background person if sizes are similar
                 
-                if last_detected_faces is not None and len(last_detected_faces) == target_faces:
+                if face_tracking == "bytetrack":
+                    faces_sorted = select_tracked_faces(faces, target_faces, last_detected_track_ids)
+                elif last_detected_faces is not None and len(last_detected_faces) == target_faces:
                    # Define score function: High Area is good, Low Distance to old is good.
                    # But simpler: calculate Intersection over Union (IOU) or Distance to old bbox center
                    
@@ -854,7 +910,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                     f1 = faces_sorted[0]['bbox']
                     f2 = faces_sorted[1]['bbox']
                     
-                    if last_detected_faces is not None and len(last_detected_faces) == 2:
+                    if face_tracking != "bytetrack" and last_detected_faces is not None and len(last_detected_faces) == 2:
                         detections = sort_by_proximity([f1, f2], last_detected_faces, get_center_bbox)
                     else:
                         detections = [f1, f2]
@@ -868,11 +924,13 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                  # If we wanted 2 but found 1, or wanted 1 found 0
                  if len(faces) > 0:
                      # Fallback to 1 face if found at least 1
-                     faces_sorted = sorted(faces, key=lambda f: f['effective_area'], reverse=True)
+                     faces_sorted = select_tracked_faces(faces, 1, last_detected_track_ids) if face_tracking == "bytetrack" else sorted(faces, key=lambda f: f['effective_area'], reverse=True)
                      detections = [faces_sorted[0]['bbox']]
                      current_num_faces_state = 1
                  else:
                      detections = []
+
+            selected_track_ids = [face.get('track_id') for face in faces_sorted[:len(detections)]] if detections else []
 
             if detections:
                 # --- STABILIZATION (DEAD ZONE) ---
@@ -929,6 +987,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
                     # Reset transition if face count changed or first detect
                     transition_frames = []
                 last_detected_faces = detections
+                last_detected_track_ids = selected_track_ids
                 last_success_frame = frame_index
             else:
                 pass
@@ -970,6 +1029,8 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
             
             # Fix XML Log sync (Empty faces for fallback)
             coords_entry = {"frame": frame_index, "src_size": [frame_width, frame_height], "faces": []}
+            if face_tracking == "bytetrack":
+                coords_entry["track_ids"] = []
             coordinate_log.append(coords_entry)
             
             continue
@@ -977,6 +1038,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
         last_frame_face_positions = current_faces
         
         target_len = len(current_faces)
+        current_track_ids = last_detected_track_ids[:target_len] if face_tracking == "bytetrack" else []
         
         if target_len == 2:
              frame_2_face_count += 1
@@ -996,6 +1058,8 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
              
         # Capture Coordinates (Frame-by-Frame)
         coords_entry = {"frame": frame_index, "src_size": [frame_width, frame_height], "faces": []}
+        if face_tracking == "bytetrack":
+            coords_entry["track_ids"] = current_track_ids
         try:
             # We want to store [x1, y1, x2, y2, rh] for each face
             if isinstance(current_faces, (list, tuple)):
@@ -1084,7 +1148,7 @@ def generate_short_insightface(input_file, output_file, index, project_folder, f
     return "1"
 
 
-def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=10, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, segments_data=None, no_face_mode="padding"):
+def edit(project_folder="tmp", face_model="insightface", face_mode="auto", face_tracking="heuristic", detection_period=None, filter_threshold=0.35, two_face_threshold=0.60, confidence_threshold=0.30, dead_zone=10, focus_active_speaker=False, active_speaker_mar=0.03, active_speaker_score_diff=1.5, include_motion=False, active_speaker_motion_deadzone=3.0, active_speaker_motion_sensitivity=0.05, active_speaker_decay=2.0, segments_data=None, no_face_mode="padding"):
     # Lazy init solutions only when needed to avoid AttributeError if import failed partially
     mp_face_detection = None
     mp_face_mesh = None
@@ -1105,12 +1169,15 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
     if INSIGHTFACE_AVAILABLE and (face_model == "insightface"):
         try:
             print("Initializing InsightFace...")
-            init_insightface()
+            init_insightface(detector_only=face_tracking == "bytetrack")
             insightface_working = True
             print("InsightFace Initialized Successfully.")
         except Exception as e:
             print(f"WARNING: InsightFace Initialization Failed ({e}). Will try MediaPipe.")
             insightface_working = False
+
+    if face_tracking == "bytetrack" and not insightface_working:
+        raise RuntimeError("BYTETrack mode currently requires the InsightFace detector to be available.")
 
     mediapipe_working = False
     use_haar = False
@@ -1180,7 +1247,7 @@ def edit(project_folder="tmp", face_model="insightface", face_mode="auto", detec
             if insightface_working:
                 try:
                     # Capture returned mode
-                    res = generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode=face_mode, detection_period=detection_period, 
+                    res = generate_short_insightface(input_file, output_file, index, project_folder, final_folder, face_mode=face_mode, face_tracking=face_tracking, detection_period=detection_period, 
                                                      filter_threshold=filter_threshold, two_face_threshold=two_face_threshold, confidence_threshold=confidence_threshold, dead_zone=dead_zone, focus_active_speaker=focus_active_speaker,
                                                      active_speaker_mar=active_speaker_mar, active_speaker_score_diff=active_speaker_score_diff, include_motion=include_motion,
                                                      active_speaker_motion_deadzone=active_speaker_motion_deadzone,

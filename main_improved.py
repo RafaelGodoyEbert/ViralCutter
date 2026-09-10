@@ -121,6 +121,7 @@ def main():
     parser.add_argument("--workflow", choices=["1", "2", "3"], default="1", help="Workflow choice: 1=Full, 2=Cut Only, 3=Subtitles Only")
     parser.add_argument("--face-model", choices=["insightface", "mediapipe"], default="insightface", help="Face detection model")
     parser.add_argument("--face-mode", choices=["auto", "1", "2"], default="auto", help="Face tracking mode: auto, 1, 2")
+    parser.add_argument("--face-tracking", choices=["heuristic", "bytetrack"], default="heuristic", help="Face association: current proximity heuristic or temporary BYTETrack IDs")
     parser.add_argument("--subtitle-config", help="Path to subtitle configuration JSON file")
     parser.add_argument("--no-face-mode", choices=["padding", "zoom"], default="padding", help="Method to handle segments with no face detected: 'padding' (9:16 frame with black bars) or 'zoom' (Center Crop Zoom)")
     parser.add_argument("--face-detect-interval", type=str, default="0.17,1.0", help="Face detection interval in seconds. Single value or 'interval_1face,interval_2face'")
@@ -369,6 +370,7 @@ def main():
     workflow_choice = args.workflow
     face_model = args.face_model
     face_mode = args.face_mode
+    face_tracking = args.face_tracking
 
     # If args weren't provided and we are not skipping prompts, ask user
     # Note: argparse defaults are set, so they "are provided" effectively.
@@ -553,7 +555,7 @@ def main():
 
         # 5. Edit Video (Face Crop)
         if workflow_choice != "3":
-            print(i18n("Editing video with {} (Mode: {})...").format(face_model, face_mode))
+            print(i18n("Editing video with {} (Mode: {}, Tracking: {})...").format(face_model, face_mode, face_tracking))
             
             # Parse dead zone safely
             try:
@@ -565,6 +567,7 @@ def main():
                 project_folder=project_folder, 
                 face_model=face_model, 
                 face_mode=face_mode, 
+                face_tracking=face_tracking,
                 detection_period=detection_intervals,
                 filter_threshold=args.face_filter_threshold,
                 two_face_threshold=args.face_two_threshold,
@@ -687,6 +690,7 @@ def main():
                 "face_config": {
                     "model": face_model,
                     "mode": face_mode,
+                    "tracking": face_tracking,
                     "detect_interval": args.face_detect_interval,
                     "filter_threshold": args.face_filter_threshold,
                     "two_face_threshold": args.face_two_threshold,

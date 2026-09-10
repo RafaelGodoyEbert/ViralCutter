@@ -30,7 +30,7 @@ def suppress_stdout_stderr():
             sys.stdout = old_stdout
             sys.stderr = old_stderr
 
-def init_insightface():
+def init_insightface(detector_only=False):
     """Explicit initialization if needed outside import."""
     global app
     if not INSIGHTFACE_AVAILABLE:
@@ -52,7 +52,8 @@ def init_insightface():
             print(f"InsightFace: Could not check available providers: {e}")
 
         with suppress_stdout_stderr():
-            app = FaceAnalysis(name='buffalo_l', providers=providers)
+            allowed_modules = ['detection'] if detector_only else None
+            app = FaceAnalysis(name='buffalo_l', providers=providers, allowed_modules=allowed_modules)
             app.prepare(ctx_id=0, det_size=(640, 640))
     return app
 

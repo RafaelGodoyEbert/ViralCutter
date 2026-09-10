@@ -202,7 +202,7 @@ def apply_experimental_preset(preset_name):
 # Subtitle logic moved to subtitle_handler.py
 
 
-def run_viral_cutter(input_source, project_name, url, cookies_txt, video_file, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_detect_interval, no_face_mode, 
+def run_viral_cutter(input_source, project_name, url, cookies_txt, video_file, segments, viral, themes, min_duration, max_duration, model, ai_backend, api_key, ai_model_name, chunk_size, workflow, face_model, face_mode, face_tracking, face_detect_interval, no_face_mode, 
                      face_filter_thresh, face_two_thresh, face_conf_thresh, face_dead_zone, focus_active_speaker, active_speaker_mar, active_speaker_score_diff, include_motion, active_speaker_motion_threshold, active_speaker_motion_sensitivity, active_speaker_decay,
                      use_custom_subs, font_name, font_size, font_color, highlight_color, outline_color, outline_thickness, shadow_color, shadow_size, is_bold, is_italic, is_uppercase, vertical_pos, alignment,
                      h_size, w_block, gap, mode, under, strike, border_s, remove_punc, video_quality, use_youtube_subs, translate_target):
@@ -280,6 +280,7 @@ def run_viral_cutter(input_source, project_name, url, cookies_txt, video_file, s
     cmd.extend(["--workflow", workflow_map.get(workflow, "1")])
     cmd.extend(["--face-model", face_model])
     cmd.extend(["--face-mode", face_mode])
+    cmd.extend(["--face-tracking", face_tracking])
     if face_detect_interval: cmd.extend(["--face-detect-interval", str(face_detect_interval)])
     if no_face_mode: cmd.extend(["--no-face-mode", no_face_mode])
     
@@ -527,6 +528,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
                         face_model_input = gr.Dropdown(["insightface", "mediapipe"], label=i18n("Face Model"), value="insightface")
                     with gr.Row():
                         face_mode_input = gr.Dropdown(choices=[(i18n("Auto"), "auto"), ("1", "1"), ("2", "2")], label=i18n("Face Mode"), value="auto")
+                        face_tracking_input = gr.Dropdown(choices=[(i18n("Current framing (size/proximity)"), "heuristic"), (i18n("Track participants (temporary IDs)"), "bytetrack")], label=i18n("Face Tracking"), value="heuristic", info=i18n("Temporary IDs keep faces consistent during this video; they do not identify people."))
                         face_detect_interval_input = gr.Textbox(label=i18n("Face Det. Interval"), value="0.17,1.0")
                         no_face_mode_input = gr.Dropdown(choices=[(i18n("Padding (9:16)"), "padding"), (i18n("Zoom (Center)"), "zoom")], label=i18n("No Face Fallback"), value="zoom")
                     
@@ -674,7 +676,7 @@ with gr.Blocks(title=i18n("ViralCutter WebUI"), theme=gr.themes.Default(primary_
              start_btn.click(run_viral_cutter, inputs=[
                  input_source, project_selector, url_input, cookies_txt_input, video_upload, segments_input, viral_input, themes_input, min_dur_input, max_dur_input, 
                  model_input, ai_backend_input, api_key_input, ai_model_input, chunk_size_input, 
-                 workflow_input, face_model_input, face_mode_input, face_detect_interval_input, no_face_mode_input, 
+                 workflow_input, face_model_input, face_mode_input, face_tracking_input, face_detect_interval_input, no_face_mode_input, 
                  face_filter_thresh_input, face_two_thresh_input, face_conf_thresh_input, face_dead_zone_input, focus_active_speaker_input, 
                  active_speaker_mar_input, active_speaker_score_diff_input, include_motion_input, active_speaker_motion_threshold_input, active_speaker_motion_sensitivity_input, active_speaker_decay_input,
                  use_custom_subs, 
@@ -924,9 +926,9 @@ if __name__ == "__main__":
         
         demo.block_thread()
     else:
-        # Check environment
-        is_windows = (os.name == 'nt')
-        library.set_url_mode("gradio" if is_windows else "fastapi")
+        # The gallery uses the same static /virals route on Windows and Linux.
+        # This avoids Gradio's file endpoint, which can return 403 on Windows.
+        library.set_url_mode("fastapi")
             
         allowed_dirs = [VIRALS_DIR, WORKING_DIR, os.getcwd(), "."]
         try:
@@ -1063,12 +1065,65 @@ if __name__ == "__main__":
                 except ValueError as error:
                     return {"error": str(error)}
 
+            @fastapi_app.post("/advanced-editor/api/faithful-preview")
+            def render_faithful_preview(project: str, file: str, payload: dict):
+                try:
+                    project_folder = os.path.join(VIRALS_DIR, project)
+                    source_name = file.removesuffix("_processed.json") + ".mp4"
+                    source_video = os.path.join(project_folder, "final", source_name)
+                    if not os.path.isfile(source_video):
+                        raise ValueError("Vídeo final não encontrado para esta legenda.")
+                    if not isinstance(payload.get("segments"), list):
+                        raise ValueError("Legendas inválidas para a prévia.")
+
+                    from scripts import adjust_subtitles
+
+                    try:
+                        with open(os.path.join(WORKING_DIR, "temp_subtitle_config.json"), encoding="utf-8") as config_file:
+                            config = json.load(config_file)
+                    except (OSError, json.JSONDecodeError):
+                        config = {}
+
+                    preview_dir = os.path.join(project_folder, "final", ".faithful-preview")
+                    os.makedirs(preview_dir, exist_ok=True)
+                    preview_id = str(int(time.time() * 1000))
+                    preview_json = os.path.join(preview_dir, file)
+                    preview_ass = os.path.join(preview_dir, f"{os.path.splitext(file)[0]}.ass")
+                    preview_video = os.path.join(preview_dir, f"preview-{preview_id}.mp4")
+                    with open(preview_json, "w", encoding="utf-8") as preview_file:
+                        json.dump({"segments": payload["segments"]}, preview_file, ensure_ascii=False)
+
+                    adjust_subtitles.generate_ass_from_file(
+                        preview_json, preview_ass, project_folder,
+                        config.get("base_color", "&H00FFFFFF&"), int(config.get("base_size", 30)),
+                        int(config.get("highlight_size", 35)), config.get("highlight_color", "&H0000FF00&"),
+                        max(1, int(config.get("words_per_block", 3))), float(config.get("gap_limit", 0.5)),
+                        config.get("mode", "highlight"), int(config.get("vertical_position", 200)), int(config.get("alignment", 2)),
+                        config.get("font", "Arial"), config.get("outline_color", "&H00000000&"), config.get("shadow_color", "&H00000000&"),
+                        int(config.get("bold", 0)), int(config.get("italic", 0)), int(config.get("underline", 0)),
+                        int(config.get("strikeout", 0)), int(config.get("border_style", 1)), float(config.get("outline_thickness", 0)),
+                        float(config.get("shadow_size", 0)), bool(config.get("uppercase", False)), {}, bool(config.get("remove_punctuation", True))
+                    )
+
+                    preview_start = max(0, float(payload.get("time", 0)) - 1.5)
+                    safe_ass_path = preview_ass.replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+                    video_filter = f"setpts=PTS+{preview_start}/TB,ass='{safe_ass_path}',setpts=PTS-{preview_start}/TB"
+                    subprocess.run([
+                        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-ss", str(preview_start), "-i", source_video,
+                        "-t", "4", "-vf", video_filter, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                        "-pix_fmt", "yuv420p", preview_video
+                    ], check=True, capture_output=True, text=True)
+                    preview_url = "/virals/" + urllib.parse.quote(os.path.relpath(preview_video, VIRALS_DIR).replace("\\", "/"), safe="/")
+                    return {"url": preview_url, "start": preview_start}
+                except (ValueError, subprocess.CalledProcessError) as error:
+                    return {"error": getattr(error, "stderr", None) or str(error)}
+
             if os.path.isdir(ADVANCED_EDITOR_DIR):
                 fastapi_app.mount("/advanced-editor", StaticFiles(directory=ADVANCED_EDITOR_DIR, html=True), name="advanced-editor")
             
             print(f"Mounted /virals to {VIRALS_DIR}")
 
-        if is_windows:
+        if os.name == 'nt':
             print("Running in Windows environment (using Gradio launch for convenience).")
             # Windows: Use demo.launch() for convenience (auto-browser, etc)
             app, local_url, share_url = demo.queue().launch(

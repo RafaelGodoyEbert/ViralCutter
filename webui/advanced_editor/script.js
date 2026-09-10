@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const addSubtitleBtn = document.getElementById('add-subtitle');
     const saveJsonBtn = document.getElementById('save-json');
     const saveProjectBtn = document.getElementById('save-project');
+    const faithfulPreviewBtn = document.getElementById('faithful-preview');
     const playPauseBtn = document.getElementById('play-pause');
     const shuttleReverseBtn = document.getElementById('shuttle-reverse');
     const shuttleForwardBtn = document.getElementById('shuttle-forward');
@@ -63,6 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let useNativeVtt = false;
     let projectTrack = null;
     let subtitleConfigSignature = '';
+    let projectVttUrl = null;
+    let vttRefreshTimer = null;
 
     // Referências do Modal de Exportação
     const exportModal = document.getElementById('export-modal');
@@ -280,6 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderTimeline();
         renderPreviewArea();
+        if (useNativeVtt) scheduleProjectTrackRefresh();
     }
 
     function renderTrackSelector() {
@@ -477,7 +481,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Área de arrastar que conterá a visualização apropriada
             const dragArea = document.createElement('div');
             dragArea.className = 'drag-area';
-            dragArea.addEventListener('pointerdown', (e) => handleMoveStart(e, index));
+            dragArea.addEventListener('pointerdown', (e) => {
+                const wordEl = e.target.closest('.word');
+                if (wordEl && !e.target.closest('.word-handle')) {
+                    handleWordMoveStart(e, index, Number(wordEl.dataset.wordIndex));
+                    return;
+                }
+                if (!e.target.closest('.word-handle') && !e.target.closest('.char-handle')) handleMoveStart(e, index);
+            });
 
             // --- LÓGICA DE VISUALIZAÇÃO DE 3 NÍVEIS ---
             const showCharLevel = state.zoomLevel >= CHAR_ZOOM_THRESHOLD;
@@ -522,26 +533,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 // NÍVEL 2: PALAVRAS
                 const wordContainer = document.createElement('div');
                 wordContainer.className = 'word-container';
+                dragArea.style.padding = '0';
 
                 const wordsToShow = sub.words;
-
-                // Calcula tempo TOTAL das palavras (sem lacunas inter-word)
-                // para que as palavras preencham 100% do bloco visualmente
-                let totalWordTime = 0;
-                wordsToShow.forEach(w => {
-                    let ws = w.start, we = w.end;
-                    if (ws === undefined || we === undefined) {
-                        const subDur = sub.end - sub.start;
-                        ws = sub.start + (subDur / wordsToShow.length) * wordsToShow.indexOf(w);
-                        we = sub.start + (subDur / wordsToShow.length) * (wordsToShow.indexOf(w) + 1);
-                    }
-                    totalWordTime += (we - ws);
-                });
-                if (totalWordTime <= 0) totalWordTime = sub.end - sub.start;
 
                 wordsToShow.forEach((word, wordIdx) => {
                     const wordEl = document.createElement('div');
                     wordEl.className = 'word';
+                    wordEl.dataset.wordIndex = wordIdx;
 
                     let wStart = word.start;
                     let wEnd = word.end;
@@ -554,10 +553,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         wEnd = sStart + (subDuration / wordsToShow.length) * (wordIdx + 1);
                     }
 
-                    const wordDuration = wEnd - wStart;
-                    const widthPercent = (wordDuration / totalWordTime) * 100;
-
-                    wordEl.style.width = `${widthPercent}%`;
+                    wordEl.style.left = `${(wStart - sub.start) * PIXELS_PER_SECOND * state.zoomLevel}px`;
+                    wordEl.style.width = `${(wEnd - wStart) * PIXELS_PER_SECOND * state.zoomLevel}px`;
                     wordEl.textContent = word.word;
 
                     // Adiciona a classe de busca se aplicável
@@ -693,6 +690,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ...segment, id: generateId() + '_project_' + index, track: state.activeTrack
             })));
             saveProjectBtn.hidden = false;
+            faithfulPreviewBtn.hidden = false;
         } catch (error) {
             alert(`Não foi possível carregar as legendas: ${error.message}`);
         }
@@ -706,9 +704,37 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const result = await response.json();
             if (!response.ok || result.error) throw new Error(result.error || 'Falha ao salvar legendas.');
+            refreshProjectTrack();
             alert('Legendas salvas no projeto.');
         } catch (error) {
             alert(`Não foi possível salvar as legendas: ${error.message}`);
+        }
+    });
+
+    faithfulPreviewBtn?.addEventListener('click', async () => {
+        if (!projectName || !projectFile || !projectVideo) return;
+        const previewWindow = window.open('', '_blank');
+        const originalLabel = faithfulPreviewBtn.textContent;
+        faithfulPreviewBtn.disabled = true;
+        faithfulPreviewBtn.textContent = '⏳ Renderizando prévia…';
+        try {
+            const segments = state.subtitles.map(({ id, track, ...segment }) => segment);
+            const response = await fetch(`api/faithful-preview?project=${encodeURIComponent(projectName)}&file=${encodeURIComponent(projectFile)}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ time: state.cursorPosition, segments })
+            });
+            const result = await response.json();
+            if (!response.ok || result.error) throw new Error(result.error || 'Falha ao renderizar a prévia.');
+            const url = new URL(result.url, location.origin).href;
+            if (previewWindow) previewWindow.location = url;
+            else window.open(url, '_blank');
+        } catch (error) {
+            previewWindow?.close();
+            alert(`Não foi possível gerar a prévia fiel: ${error.message}`);
+        } finally {
+            faithfulPreviewBtn.disabled = false;
+            faithfulPreviewBtn.textContent = originalLabel;
         }
     });
 
@@ -987,12 +1013,64 @@ document.addEventListener('DOMContentLoaded', () => {
         subtitleOverlay.style.textAlign = ({1: 'left', 2: 'center', 3: 'right'})[config.alignment] || 'center';
         subtitleOverlay.style.textTransform = config.uppercase ? 'uppercase' : 'none';
         subtitleOverlay.style.background = Number(config.border_style) === 3 ? 'rgba(0,0,0,.7)' : 'transparent';
-        if (configChanged && projectTrack?.src) {
-            const url = new URL(projectTrack.src, location.href);
-            url.searchParams.set('v', Date.now());
-            projectTrack.src = url.href;
-            projectTrack.track.mode = 'showing';
-        }
+        if (configChanged) refreshProjectTrack();
+    }
+
+    function refreshProjectTrack() {
+        if (!projectTrack) return;
+        if (projectVttUrl) URL.revokeObjectURL(projectVttUrl);
+        projectVttUrl = URL.createObjectURL(new Blob([buildProjectVtt()], { type: 'text/vtt' }));
+        projectTrack.src = projectVttUrl;
+        projectTrack.track.mode = 'showing';
+    }
+
+    function scheduleProjectTrackRefresh() {
+        if (!useNativeVtt || !projectTrack) return;
+        clearTimeout(vttRefreshTimer);
+        vttRefreshTimer = setTimeout(refreshProjectTrack, 120);
+    }
+
+    function buildProjectVtt() {
+        const timestamp = seconds => {
+            const total = Math.max(0, Math.round(Number(seconds || 0) * 1000));
+            const hours = Math.floor(total / 3600000);
+            const minutes = Math.floor(total / 60000) % 60;
+            const secs = Math.floor(total / 1000) % 60;
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(total % 1000).padStart(3, '0')}`;
+        };
+        const clean = value => {
+            let text = String(value || '');
+            if (subtitleConfig.remove_punctuation) text = text.replace(/[^\w\sÀ-ÿ'-]/g, '');
+            return escapeHtml(subtitleConfig.uppercase ? text.toUpperCase() : text);
+        };
+        const mode = subtitleConfig.mode || 'highlight';
+        const blockSize = Math.max(1, Number(subtitleConfig.words_per_block) || 3);
+        const alignment = ({ 1: 'start', 2: 'center', 3: 'end' })[subtitleConfig.alignment] || 'center';
+        const cues = [];
+
+        state.subtitles.forEach(subtitle => {
+            const words = getSubtitleWords(subtitle);
+            if (!words.length) {
+                const text = clean(subtitle.text);
+                if (text) cues.push([subtitle.start, subtitle.end, text]);
+                return;
+            }
+            for (let blockStart = 0; blockStart < words.length; blockStart += blockSize) {
+                const block = words.slice(blockStart, blockStart + blockSize);
+                if (mode === 'no_highlight') {
+                    cues.push([block[0].start, block.at(-1).end, block.map(word => clean(word.word)).join(' ')]);
+                    continue;
+                }
+                block.forEach((activeWord, index) => {
+                    const end = index + 1 < block.length ? block[index + 1].start : activeWord.end;
+                    const text = mode === 'word_by_word'
+                        ? clean(activeWord.word)
+                        : block.map(word => word === activeWord ? `<c.highlight>${clean(word.word)}</c>` : clean(word.word)).join(' ');
+                    cues.push([activeWord.start, Math.max(end, activeWord.start + .01), text]);
+                });
+            }
+        });
+        return `WEBVTT\n\n${cues.filter(([, , text]) => text).map(([start, end, text]) => `${timestamp(start)} --> ${timestamp(end)} align:${alignment}\n${text}`).join('\n\n')}`;
     }
 
     function renderWaveform() {
@@ -1465,6 +1543,50 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Lógica de Interação da Timeline ---
+    function handleWordMoveStart(e, subtitleIndex, wordIndex) {
+        e.preventDefault();
+        e.stopPropagation();
+        const initialSub = state.subtitles[subtitleIndex];
+        const initialWord = initialSub.words?.[wordIndex];
+        const wordEl = e.target.closest('.word');
+        if (!initialWord || !wordEl) return;
+
+        const startX = e.clientX;
+        const duration = Math.max(.001, initialWord.end - initialWord.start);
+        const previousEnd = wordIndex ? initialSub.words[wordIndex - 1].end : initialSub.start;
+        const nextStart = wordIndex < initialSub.words.length - 1 ? initialSub.words[wordIndex + 1].start : initialSub.end;
+        let finalStart = initialWord.start;
+        wordEl.setPointerCapture?.(e.pointerId);
+
+        function onPointerMove(moveEvent) {
+            if (moveEvent.pointerId !== e.pointerId) return;
+            moveEvent.preventDefault();
+            const delta = (moveEvent.clientX - startX) / (PIXELS_PER_SECOND * state.zoomLevel);
+            const maxStart = nextStart - duration;
+            finalStart = maxStart >= previousEnd
+                ? Math.max(previousEnd, Math.min(initialWord.start + delta, maxStart))
+                : initialWord.start;
+            wordEl.style.left = `${(finalStart - initialSub.start) * PIXELS_PER_SECOND * state.zoomLevel}px`;
+        }
+
+        function onPointerUp(upEvent) {
+            if (upEvent.pointerId !== e.pointerId) return;
+            const newSubs = [...state.subtitles];
+            const words = initialSub.words.map((word, index) => index === wordIndex
+                ? { ...word, start: finalStart, end: finalStart + duration }
+                : { ...word });
+            newSubs[subtitleIndex] = { ...initialSub, words };
+            updateSubtitles(newSubs, true);
+            wordEl.removeEventListener('pointermove', onPointerMove);
+            wordEl.removeEventListener('pointerup', onPointerUp);
+            wordEl.removeEventListener('pointercancel', onPointerUp);
+        }
+
+        wordEl.addEventListener('pointermove', onPointerMove);
+        wordEl.addEventListener('pointerup', onPointerUp);
+        wordEl.addEventListener('pointercancel', onPointerUp);
+    }
+
     function handleWordResizeStart(e, subtitleIndex, wordIndex) {
         e.stopPropagation();
         if (e.type === 'touchstart') e.preventDefault();
@@ -1550,18 +1672,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Atualiza APENAS o CSS dos elementos DOM existentes (sem re-render!)
-            if (wordEls) {
-                // Atualiza a palavra atual
-                if (wordEls[wordIndex]) {
-                    const dur = newCurrentEnd - currentWord.start;
-                    wordEls[wordIndex].style.width = `${(dur / totalWordTime) * 100}%`;
+                if (wordEls) {
+                    // Atualiza a palavra atual
+                    if (wordEls[wordIndex]) {
+                        const dur = newCurrentEnd - currentWord.start;
+                        wordEls[wordIndex].style.width = `${dur * PIXELS_PER_SECOND * state.zoomLevel}px`;
+                    }
+                    // Atualiza a próxima palavra
+                    if (wordEls[wordIndex + 1]) {
+                        const dur = newNextEnd - newNextStart;
+                        wordEls[wordIndex + 1].style.left = `${(newNextStart - subtitle.start) * PIXELS_PER_SECOND * state.zoomLevel}px`;
+                        wordEls[wordIndex + 1].style.width = `${dur * PIXELS_PER_SECOND * state.zoomLevel}px`;
+                    }
                 }
-                // Atualiza a próxima palavra
-                if (wordEls[wordIndex + 1]) {
-                    const dur = newNextEnd - newNextStart;
-                    wordEls[wordIndex + 1].style.width = `${(dur / totalWordTime) * 100}%`;
-                }
-            }
 
             // Guarda os valores calculados para uso no mouseup
             onMouseMove._lastBoundary = newBoundary;
@@ -1946,10 +2069,10 @@ document.addEventListener('DOMContentLoaded', () => {
         renderPreviewArea();
     }
 
-    async function handleTextChange(e) {
-        if (state.selectedSubtitles.length !== 1) return;
+    function handleTextChange(e) {
         const newText = e.target.value;
-        const selectedId = state.selectedSubtitles[0].id;
+        const selectedId = e.target.closest('.subtitle-list-row')?.dataset.subId;
+        if (!selectedId) return;
 
         // Sempre busca o índice atual para evitar referências obsoletas
         const index = state.subtitles.findIndex(s => s.id === selectedId);
@@ -1993,6 +2116,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         renderTimeline();
+        scheduleProjectTrackRefresh();
 
         // A versão estática mantém o ajuste local; não depende do endpoint do Dublador.
         previewArea.querySelector(`.subtitle-list-row[data-sub-id="${CSS.escape(String(selectedId))}"]`)?._renderWordSpans?.();
