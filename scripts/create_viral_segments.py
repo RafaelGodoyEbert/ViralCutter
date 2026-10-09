@@ -181,7 +181,7 @@ def preprocess_transcript_for_ai(segments):
     
     # Try to start with (0s) based on first segment
     first_start = segments[0].get('start', 0)
-    full_text += f"({int(first_start)}s) "
+    full_text += f"({first_start:.2f}s) "
     last_tag_time = first_start
 
     for seg in segments:
@@ -190,9 +190,8 @@ def preprocess_transcript_for_ai(segments):
         
         full_text += text + " "
         
-        if end_time - last_tag_time >= 4:
-            full_text += f"({int(end_time)}s) "
-            last_tag_time = end_time
+        full_text += f"({int(end_time)}s) "
+        last_tag_time = end_time
 
     return full_text.strip()
 
